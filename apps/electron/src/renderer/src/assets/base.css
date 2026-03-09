@@ -1,0 +1,38 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+body {
+  min-height: 100vh;
+  line-height: 1.5;
+  font-family:
+    Inter,
+    -apple-system,
+    BlinkMacSystemFont,
+    'Segoe UI',
+    Roboto,
+    Oxygen,
+    Ubuntu,
+    Cantarell,
+    'Fira Sans',
+    'Droid Sans',
+    'Helvetica Neue',
+    sans-serif;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+button,
+[role='button'],
+a {
+  cursor: pointer;
+}
+
+/* Opcional: define cursor de bloqueado para botões desativados */
+button:disabled,
+[role='button']:disabled {
+  cursor: not-allowed;
+}

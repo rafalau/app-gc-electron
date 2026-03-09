@@ -1,0 +1,21 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Leilao {
+  id                      String   @id @default(cuid())
+  titulo_evento           String
+  data                    String   // yyyy-mm-dd
+  condicoes_de_pagamento  String   @default("")
+  usa_dolar               Boolean  @default(false)
+  cotacao                 Float?
+  multiplicador           Float
+
+  criado_em               DateTime @default(now())
+  atualizado_em           DateTime @updatedAt
+}

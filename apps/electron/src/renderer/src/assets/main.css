@@ -1,0 +1,12 @@
+@import 'tailwindcss';
+@import './base.css';
+
+html,
+body,
+#app {
+  height: 100%;
+}
+
+body {
+  overflow-y: auto;
+}

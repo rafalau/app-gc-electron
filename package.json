@@ -1,0 +1,36 @@
+{
+  "name": "app-gc-electron",
+  "version": "1.0.0",
+  "description": "",
+  "private": true,
+  "main": "index.js",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1",
+    "dev": "npm -w apps/electron run dev",
+    "build": "npm -w apps/electron run build",
+    "prisma:generate": "cross-env DATABASE_URL=file:./apps/electron/prisma/dev.db prisma generate --schema apps/electron/prisma/schema.prisma",
+    "prisma:migrate": "cross-env DATABASE_URL=file:./apps/electron/prisma/dev.db prisma migrate dev --schema apps/electron/prisma/schema.prisma",
+    "postinstall": "cross-env DATABASE_URL=file:./apps/electron/prisma/dev.db prisma generate --schema apps/electron/prisma/schema.prisma",
+    "prisma:migrate:deploy": "cross-env DATABASE_URL=file:./apps/electron/prisma/dev.db prisma migrate deploy --schema apps/electron/prisma/schema.prisma"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "dependencies": {
+    "@fortawesome/fontawesome-svg-core": "^7.2.0",
+    "@fortawesome/free-brands-svg-icons": "^7.2.0",
+    "@fortawesome/free-solid-svg-icons": "^7.2.0",
+    "@fortawesome/vue-fontawesome": "^3.1.3",
+    "uuid": "^13.0.0",
+    "@prisma/client": "^5.22.0"
+  },
+  "devDependencies": {
+    "prisma": "^5.22.0",
+    "cross-env": "^7.0.3"
+  }
+}
