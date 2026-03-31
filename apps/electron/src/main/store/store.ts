@@ -1,5 +1,9 @@
 type StoreSchema = {
   modo: 'HOST' | 'REMOTO' | null
+  layoutAnimaisPorLeilao: Record<
+    string,
+    { modo: 'AGREGADAS' | 'SEPARADAS'; incluirRacaNasImportacoes: boolean }
+  >
 }
 
 type ElectronStoreInstance = {
@@ -21,7 +25,8 @@ export async function getStore() {
   store = new StoreCtor({
     name: 'config',
     defaults: {
-      modo: null
+      modo: null,
+      layoutAnimaisPorLeilao: {}
     }
   })
 

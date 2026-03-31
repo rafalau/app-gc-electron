@@ -6,6 +6,7 @@ export type Leilao = {
   usa_dolar: boolean
   cotacao: number | null
   multiplicador: number
+  total_animais: number
   criado_em: string
   atualizado_em: string
 }

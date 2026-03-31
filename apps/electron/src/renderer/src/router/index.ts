@@ -21,4 +21,5 @@ router.beforeEach(async (to) => {
 
   if (!modo && to.path !== '/modo') return '/modo'
   if (modo && to.path === '/modo') return '/inicio'
+  return true
 })

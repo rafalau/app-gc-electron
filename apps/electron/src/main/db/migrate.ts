@@ -14,13 +14,29 @@ export function getRuntimeDatabaseUrl() {
   return fileSqliteUrl(dbPath)
 }
 
+function getProjectRoot() {
+  const compiledRoot = resolve(__dirname, '../../../../')
+  const cwdRoot = process.cwd()
+  const appRoot = app.getAppPath()
+
+  const candidates = [compiledRoot, cwdRoot, appRoot]
+
+  for (const candidate of candidates) {
+    if (existsSync(resolve(candidate, 'package.json'))) return candidate
+  }
+
+  return cwdRoot
+}
+
 function getSchemaPath() {
+  const projectRoot = getProjectRoot()
+
   // 1) DEV: a partir do código compilado em apps/electron/out/main
   // __dirname aqui vira .../apps/electron/out/main
   const devPath = resolve(__dirname, '../../prisma/schema.prisma')
 
   // 2) Fallback: quando rodar a partir do repo (alguns setups)
-  const cwdPath = resolve(process.cwd(), 'apps/electron/prisma/schema.prisma')
+  const cwdPath = resolve(projectRoot, 'apps/electron/prisma/schema.prisma')
 
   // 3) (futuro) PROD empacotado: vamos ajustar quando empacotar
   const prodPath = resolve(app.getAppPath(), 'prisma/schema.prisma')
@@ -30,9 +46,38 @@ function getSchemaPath() {
   return prodPath
 }
 
+function getConfigPath() {
+  const projectRoot = getProjectRoot()
+  const cwdPath = resolve(projectRoot, 'prisma.config.ts')
+  const appPath = resolve(app.getAppPath(), 'prisma.config.ts')
+
+  if (existsSync(cwdPath)) return cwdPath
+  return appPath
+}
+
+function getPrismaCommand() {
+  const projectRoot = getProjectRoot()
+  const binaryName = process.platform === 'win32' ? 'prisma.cmd' : 'prisma'
+  const localBinary = resolve(projectRoot, 'node_modules', '.bin', binaryName)
+
+  if (existsSync(localBinary)) {
+    return {
+      cmd: localBinary,
+      cwd: projectRoot
+    }
+  }
+
+  return {
+    cmd: process.platform === 'win32' ? 'npx.cmd' : 'npx',
+    cwd: projectRoot
+  }
+}
+
 export async function migrateDeploy() {
   const databaseUrl = getRuntimeDatabaseUrl()
   const schemaPath = getSchemaPath()
+  const configPath = getConfigPath()
+  const { cmd, cwd } = getPrismaCommand()
 
   const env = {
     ...process.env,
@@ -40,17 +85,30 @@ export async function migrateDeploy() {
   }
 
   await new Promise<void>((resolvePromise, reject) => {
-    const cmd = process.platform === 'win32' ? 'npx.cmd' : 'npx'
-    const child = spawn(cmd, ['prisma', 'migrate', 'deploy', '--schema', schemaPath], { env })
+    const args = cmd.includes('node_modules')
+      ? ['migrate', 'deploy', '--schema', schemaPath, '--config', configPath]
+      : ['prisma', 'migrate', 'deploy', '--schema', schemaPath, '--config', configPath]
 
+    const child = spawn(cmd, args, {
+      cwd,
+      env
+    })
+
+    let stdout = ''
     let stderr = ''
+
+    child.stdout.on('data', (d) => {
+      stdout += String(d)
+    })
+
     child.stderr.on('data', (d) => {
       stderr += String(d)
     })
 
     child.on('exit', (code) => {
       if (code === 0) return resolvePromise()
-      reject(new Error(stderr || `prisma migrate deploy falhou (code ${code})`))
+      const detalhes = [stdout.trim(), stderr.trim()].filter(Boolean).join('\n')
+      reject(new Error(detalhes || `prisma migrate deploy falhou (code ${code})`))
     })
   })
 }

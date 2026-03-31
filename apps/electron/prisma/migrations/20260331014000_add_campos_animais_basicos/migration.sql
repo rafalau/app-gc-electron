@@ -1,0 +1,2 @@
+ALTER TABLE "Animal" ADD COLUMN "informacoes" TEXT NOT NULL DEFAULT '';
+ALTER TABLE "Animal" ADD COLUMN "genealogia" TEXT NOT NULL DEFAULT '';

@@ -4,7 +4,18 @@ import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
 import { registrarIpcLeiloes } from './ipc/leiloes'
 import { registrarIpcConfig } from './ipc/config'
+import { registrarIpcAnimais } from './ipc/animais'
+import { registrarIpcImportacoes } from './ipc/importacoes'
+import { registrarIpcTbs } from './ipc/tbs'
+import { registrarIpcRemate360 } from './ipc/remate360'
+import { registrarIpcStudbook } from './ipc/studbook'
 import { migrateDeploy } from './db/migrate'
+
+if (process.platform === 'linux') {
+  // Reduz ruído de logs internos do Chromium/Electron no terminal.
+  app.commandLine.appendSwitch('disable-logging')
+  app.commandLine.appendSwitch('log-level', '3')
+}
 
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
@@ -21,8 +32,6 @@ function createWindow(): void {
 
   mainWindow.on('ready-to-show', () => {
     mainWindow.show()
-    // DevTools em dev (para facilitar)
-    if (is.dev) mainWindow.webContents.openDevTools({ mode: 'detach' })
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {
@@ -37,29 +46,40 @@ function createWindow(): void {
   }
 }
 
-app.whenReady().then(async () => {
-  electronApp.setAppUserModelId('com.electron')
+app
+  .whenReady()
+  .then(async () => {
+    electronApp.setAppUserModelId('com.electron')
 
-  app.on('browser-window-created', (_, window) => {
-    optimizer.watchWindowShortcuts(window)
+    app.on('browser-window-created', (_, window) => {
+      optimizer.watchWindowShortcuts(window)
+    })
+
+    // IPC test
+    ipcMain.on('ping', () => console.log('pong'))
+
+    // Aplicar migrations no banco do usuário (profissional)
+    await migrateDeploy()
+
+    // Registrar IPCs uma única vez (não dentro da janela)
+    registrarIpcConfig()
+    registrarIpcLeiloes()
+    registrarIpcAnimais()
+    registrarIpcImportacoes()
+    registrarIpcTbs()
+    registrarIpcRemate360()
+    registrarIpcStudbook()
+
+    createWindow()
+
+    app.on('activate', function () {
+      if (BrowserWindow.getAllWindows().length === 0) createWindow()
+    })
   })
-
-  // IPC test
-  ipcMain.on('ping', () => console.log('pong'))
-
-  // Aplicar migrations no banco do usuário (profissional)
-  await migrateDeploy()
-
-  // Registrar IPCs uma única vez (não dentro da janela)
-  registrarIpcConfig()
-  registrarIpcLeiloes()
-
-  createWindow()
-
-  app.on('activate', function () {
-    if (BrowserWindow.getAllWindows().length === 0) createWindow()
+  .catch((error) => {
+    console.error('Falha ao iniciar a aplicação:', error)
+    app.quit()
   })
-})
 
 app.on('window-all-closed', () => {
   if (process.platform !== 'darwin') {

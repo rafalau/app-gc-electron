@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, ref } from 'vue'
 
 export type ToastType = 'success' | 'error' | 'warning' | 'info'
 
@@ -26,7 +26,7 @@ function addToast(message: string, type: ToastType = 'info', duration = 3000) {
 }
 
 function removeToast(id: string) {
-  toasts.value = toasts.value.filter(t => t.id !== id)
+  toasts.value = toasts.value.filter((t) => t.id !== id)
 }
 
 function getIcon(type: ToastType) {

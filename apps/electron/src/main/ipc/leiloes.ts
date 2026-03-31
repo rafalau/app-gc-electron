@@ -12,9 +12,32 @@ type LeilaoCriarPayload = {
 
 type LeilaoAtualizarPayload = Partial<LeilaoCriarPayload>
 
+function upper(value?: string | null) {
+  return String(value ?? '').trim().toUpperCase()
+}
+
+function normalizarPayloadCriar(payload: LeilaoCriarPayload): LeilaoCriarPayload {
+  return {
+    ...payload,
+    titulo_evento: upper(payload.titulo_evento),
+    condicoes_de_pagamento: upper(payload.condicoes_de_pagamento)
+  }
+}
+
+function normalizarPayloadAtualizar(payload: LeilaoAtualizarPayload): LeilaoAtualizarPayload {
+  return {
+    ...payload,
+    ...(payload.titulo_evento !== undefined ? { titulo_evento: upper(payload.titulo_evento) } : {}),
+    ...(payload.condicoes_de_pagamento !== undefined
+      ? { condicoes_de_pagamento: upper(payload.condicoes_de_pagamento) }
+      : {})
+  }
+}
+
 function serializar(leilao: any) {
   return {
     ...leilao,
+    total_animais: leilao.total_animais ?? 0,
     criado_em: leilao.criado_em instanceof Date ? leilao.criado_em.toISOString() : leilao.criado_em,
     atualizado_em: leilao.atualizado_em instanceof Date ? leilao.atualizado_em.toISOString() : leilao.atualizado_em
   }
@@ -26,19 +49,57 @@ export function registrarIpcLeiloes() {
     const leiloes = await prisma.leilao.findMany({
       orderBy: [{ data: 'desc' }]
     })
-    return leiloes.map(serializar)
+    const contagens = await prisma.$queryRawUnsafe<Array<{ leilao_id: string; total: number }>>(
+      `
+        SELECT leilao_id, COUNT(*) as total
+        FROM Animal
+        GROUP BY leilao_id
+      `
+    )
+    const contagensPorLeilao = new Map(contagens.map((item) => [item.leilao_id, Number(item.total)]))
+
+    return leiloes.map((leilao) =>
+      serializar({
+        ...leilao,
+        total_animais: contagensPorLeilao.get(leilao.id) ?? 0
+      })
+    )
+  })
+
+  ipcMain.handle('leiloes:obter', async (_evt, id: string) => {
+    const prisma = await getPrisma()
+    const leilao = await prisma.leilao.findUnique({
+      where: { id }
+    })
+
+    if (!leilao) return null
+
+    const contagem = await prisma.$queryRawUnsafe<Array<{ total: number }>>(
+      `
+        SELECT COUNT(*) as total
+        FROM Animal
+        WHERE leilao_id = ?
+      `,
+      id
+    )
+
+    return serializar({
+      ...leilao,
+      total_animais: Number(contagem[0]?.total ?? 0)
+    })
   })
 
   ipcMain.handle('leiloes:criar', async (_evt, payload: LeilaoCriarPayload) => {
     const prisma = await getPrisma()
+    const payloadNormalizado = normalizarPayloadCriar(payload)
     const leilao = await prisma.leilao.create({
       data: {
-        titulo_evento: payload.titulo_evento,
-        data: payload.data,
-        condicoes_de_pagamento: payload.condicoes_de_pagamento ?? '',
-        usa_dolar: payload.usa_dolar ?? false,
-        cotacao: payload.cotacao,
-        multiplicador: payload.multiplicador
+        titulo_evento: payloadNormalizado.titulo_evento,
+        data: payloadNormalizado.data,
+        condicoes_de_pagamento: payloadNormalizado.condicoes_de_pagamento ?? '',
+        usa_dolar: payloadNormalizado.usa_dolar ?? false,
+        cotacao: payloadNormalizado.cotacao,
+        multiplicador: payloadNormalizado.multiplicador
       }
     })
     return serializar(leilao)
@@ -46,15 +107,24 @@ export function registrarIpcLeiloes() {
 
   ipcMain.handle('leiloes:atualizar', async (_evt, id: string, payload: LeilaoAtualizarPayload) => {
     const prisma = await getPrisma()
+    const payloadNormalizado = normalizarPayloadAtualizar(payload)
     const leilao = await prisma.leilao.update({
       where: { id },
       data: {
-        ...(payload.titulo_evento !== undefined ? { titulo_evento: payload.titulo_evento } : {}),
-        ...(payload.data !== undefined ? { data: payload.data } : {}),
-        ...(payload.condicoes_de_pagamento !== undefined ? { condicoes_de_pagamento: payload.condicoes_de_pagamento } : {}),
-        ...(payload.usa_dolar !== undefined ? { usa_dolar: payload.usa_dolar } : {}),
-        ...(payload.cotacao !== undefined ? { cotacao: payload.cotacao } : {}),
-        ...(payload.multiplicador !== undefined ? { multiplicador: payload.multiplicador } : {}),
+        ...(payloadNormalizado.titulo_evento !== undefined
+          ? { titulo_evento: payloadNormalizado.titulo_evento }
+          : {}),
+        ...(payloadNormalizado.data !== undefined ? { data: payloadNormalizado.data } : {}),
+        ...(payloadNormalizado.condicoes_de_pagamento !== undefined
+          ? { condicoes_de_pagamento: payloadNormalizado.condicoes_de_pagamento }
+          : {}),
+        ...(payloadNormalizado.usa_dolar !== undefined
+          ? { usa_dolar: payloadNormalizado.usa_dolar }
+          : {}),
+        ...(payloadNormalizado.cotacao !== undefined ? { cotacao: payloadNormalizado.cotacao } : {}),
+        ...(payloadNormalizado.multiplicador !== undefined
+          ? { multiplicador: payloadNormalizado.multiplicador }
+          : {}),
         atualizado_em: new Date()
       }
     })

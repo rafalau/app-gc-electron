@@ -1,18 +1,377 @@
 <script setup lang="ts">
-import { useRoute } from 'vue-router'
+import { computed, ref } from 'vue'
+import { useRouter, useRoute } from 'vue-router'
+import BaseButton from '@renderer/components/ui/BaseButton.vue'
+import BaseDropdown from '@renderer/components/ui/BaseDropdown.vue'
+import BaseModal from '@renderer/components/ui/BaseModal.vue'
+import AnimalTabela from '@renderer/components/animal/AnimalTabela.vue'
+import AnimalModal from '@renderer/components/animal/AnimalModal.vue'
+import ConferenciaAnimaisModal from '@renderer/components/animal/ConferenciaAnimaisModal.vue'
+import TbsImportModal from '@renderer/components/animal/TbsImportModal.vue'
+import Remate360ImportModal from '@renderer/components/animal/Remate360ImportModal.vue'
+import ImportSummaryModal from '@renderer/components/animal/ImportSummaryModal.vue'
+import { useAnimais } from '@renderer/composables/useAnimais'
+import { applyUppercaseInput } from '@renderer/utils/uppercaseInput'
 
+const router = useRouter()
 const route = useRoute()
 const leilaoId = route.params.id as string
+
+const {
+  carregando,
+  leilao,
+  busca,
+  animaisFiltrados,
+  modalAberto,
+  modalModo,
+  form,
+  erroModal,
+  resumoImportacao,
+  resumoAberto,
+  limpandoTudo,
+  excluindoAnimalId,
+  tbsAberto,
+  tbsLoading,
+  tbsImportando,
+  tbsErro,
+  tbsLeiloes,
+  tbsSelectedAuctionId,
+  remate360Aberto,
+  remate360Loading,
+  remate360Importando,
+  remate360Erro,
+  remate360Eventos,
+  remate360SelectedEventId,
+  layoutInformacoesModo,
+  incluirRacaNasImportacoes,
+  abrirCriar,
+  abrirEditar,
+  fecharModal,
+  fecharResumo,
+  importarPlanilhaExcel,
+  abrirImportacaoTbs,
+  fecharImportacaoTbs,
+  selecionarLeilaoTbs,
+  importarDaTbs,
+  abrirImportacaoRemate360,
+  fecharImportacaoRemate360,
+  selecionarEventoRemate360,
+  importarDoRemate360,
+  salvarConfiguracaoLayout,
+  salvarModal,
+  excluir,
+  limparTodos
+} = useAnimais(leilaoId)
+
+const tituloPagina = computed(() => leilao.value?.titulo_evento || 'Leilão')
+const limparAberto = ref(false)
+const conferenciaAberta = ref(false)
+const configuracoesAbertas = ref(false)
+const confirmacaoLimpar = ref('')
+const layoutModoDraft = ref<'AGREGADAS' | 'SEPARADAS'>('AGREGADAS')
+const incluirRacaDraft = ref(false)
+const importItems = computed(() => [
+  {
+    label: 'Importar Excel',
+    icon: 'fa-file-excel',
+    action: () => {
+      void importarPlanilhaExcel()
+    }
+  },
+  {
+    label: 'Importar TBS',
+    icon: 'fa-cloud-download-alt',
+    action: () => {
+      void abrirImportacaoTbs()
+    }
+  },
+  {
+    label: 'Importar do Remate360',
+    icon: 'fa-cloud-download-alt',
+    action: () => {
+      void abrirImportacaoRemate360()
+    }
+  }
+])
+
+function voltar() {
+  router.push('/inicio')
+}
+
+function formatarDataBR(iso?: string) {
+  if (!iso) return ''
+  const [y, m, d] = iso.split('-')
+  if (!y || !m || !d) return iso
+  return `${d}/${m}/${y}`
+}
+
+function abrirLimpar() {
+  confirmacaoLimpar.value = ''
+  limparAberto.value = true
+}
+
+function fecharLimpar() {
+  if (limpandoTudo.value) return
+  confirmacaoLimpar.value = ''
+  limparAberto.value = false
+}
+
+async function confirmarLimpar() {
+  await limparTodos()
+  fecharLimpar()
+}
+
+function abrirConferencia() {
+  conferenciaAberta.value = true
+}
+
+function fecharConferencia() {
+  conferenciaAberta.value = false
+}
+
+function abrirConfiguracoes() {
+  layoutModoDraft.value = layoutInformacoesModo.value
+  incluirRacaDraft.value = incluirRacaNasImportacoes.value
+  configuracoesAbertas.value = true
+}
+
+function fecharConfiguracoes() {
+  configuracoesAbertas.value = false
+}
+
+async function salvarConfiguracoes() {
+  await salvarConfiguracaoLayout(layoutModoDraft.value, incluirRacaDraft.value)
+  configuracoesAbertas.value = false
+}
 </script>
 
 <template>
-  <div class="p-8">
-    <h1 class="text-2xl font-bold">Leilão</h1>
-    <div class="text-gray-500 mt-2">ID: {{ leilaoId }}</div>
+  <div class="p-4 md:p-6 lg:p-8 min-h-screen bg-blue-50">
+    <div class="flex flex-col gap-4 mb-5">
+      <div>
+        <button
+          class="text-sm text-blue-700 hover:text-blue-900 font-medium"
+          type="button"
+          @click="voltar"
+        >
+          ← Voltar para leilões
+        </button>
 
-    <div class="mt-6 border rounded-2xl p-6 bg-white">
-      <div class="font-semibold">Animais</div>
-      <div class="text-gray-500 mt-2">Próxima etapa: CRUD de animais para este leilão.</div>
+        <h1 class="text-2xl font-bold text-gray-900 mt-2">{{ tituloPagina }}</h1>
+
+        <div v-if="leilao" class="flex flex-wrap gap-2 mt-3">
+          <span
+            class="inline-flex items-center px-3 py-1 rounded-full bg-white border border-blue-200 text-sm font-medium text-blue-800"
+          >
+            Data: {{ formatarDataBR(leilao.data) }}
+          </span>
+          <span
+            class="inline-flex items-center px-3 py-1 rounded-full bg-white border border-green-200 text-sm font-medium text-green-700"
+          >
+            {{ leilao.total_animais }} animal(is)
+          </span>
+          <span
+            class="inline-flex items-center px-3 py-1 rounded-full bg-white border border-gray-200 text-sm font-medium text-gray-700"
+          >
+            Multiplicador: {{ leilao.multiplicador }}
+          </span>
+        </div>
+      </div>
+
+      <div class="flex flex-wrap items-center justify-end gap-2">
+        <BaseDropdown :items="importItems" label="Importar" />
+        <BaseButton variante="secundario" class="w-full sm:w-auto" @click="abrirConfiguracoes">
+          <i class="fas fa-sliders-h mr-1" />
+          Configurações
+        </BaseButton>
+        <BaseButton
+          v-if="leilao && leilao.total_animais > 0"
+          variante="secundario"
+          class="w-full sm:w-auto"
+          @click="abrirConferencia"
+        >
+          <i class="fas fa-clipboard-check mr-1" />
+          Modo Conferência
+        </BaseButton>
+        <BaseButton
+          v-if="leilao && leilao.total_animais > 0"
+          variante="perigo"
+          class="w-full sm:w-auto"
+          @click="abrirLimpar"
+        >
+          <i class="fas fa-trash-alt mr-1" />
+          Limpar
+        </BaseButton>
+        <BaseButton variante="primario" class="w-full sm:w-auto" @click="abrirCriar">
+          <i class="fas fa-plus mr-1" />
+          Novo Animal
+        </BaseButton>
+      </div>
+
+      <div class="w-full">
+        <div class="relative w-full">
+          <i
+            class="fas fa-search pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 text-sm text-slate-400"
+          />
+          <input
+            v-model="busca"
+            class="w-full rounded-2xl border border-slate-200 bg-white pl-11 pr-4 py-3 text-sm text-slate-700 shadow-sm outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+            type="text"
+            placeholder="Buscar por lote, nome, raça, informações ou genealogia..."
+            @input="applyUppercaseInput($event, (value) => (busca = value))"
+          />
+        </div>
+      </div>
     </div>
+
+    <div
+      v-if="carregando"
+      class="border rounded-2xl p-10 bg-white text-center text-gray-500 shadow-sm"
+    >
+      Carregando animais...
+    </div>
+
+    <div
+      v-else-if="!leilao"
+      class="border rounded-2xl p-10 bg-white text-center text-gray-500 shadow-sm"
+    >
+      Leilão não encontrado.
+    </div>
+
+    <AnimalTabela
+      v-else
+      :animais="animaisFiltrados"
+      :layout-modo="layoutInformacoesModo"
+      :excluindo-animal-id="excluindoAnimalId"
+      @editar="abrirEditar"
+      @excluir="excluir"
+    />
+
+    <AnimalModal
+      :aberto="modalAberto"
+      :modo="modalModo"
+      :layout-modo="layoutInformacoesModo"
+      :form="form"
+      :erro="erroModal"
+      @fechar="fecharModal"
+      @salvar="salvarModal"
+    />
+
+    <TbsImportModal
+      :aberto="tbsAberto"
+      :leiloes="tbsLeiloes"
+      :loading="tbsLoading"
+      :importing="tbsImportando"
+      :selected-auction-id="tbsSelectedAuctionId"
+      :erro="tbsErro"
+      @fechar="fecharImportacaoTbs"
+      @select="selecionarLeilaoTbs"
+      @importar="importarDaTbs"
+    />
+
+    <Remate360ImportModal
+      :aberto="remate360Aberto"
+      :eventos="remate360Eventos"
+      :loading="remate360Loading"
+      :importing="remate360Importando"
+      :selected-event-id="remate360SelectedEventId"
+      :erro="remate360Erro"
+      @fechar="fecharImportacaoRemate360"
+      @select="selecionarEventoRemate360"
+      @importar="importarDoRemate360"
+    />
+
+    <ImportSummaryModal :aberto="resumoAberto" :resumo="resumoImportacao" @fechar="fecharResumo" />
+
+    <ConferenciaAnimaisModal
+      :aberto="conferenciaAberta"
+      :animais="animaisFiltrados"
+      @fechar="fecharConferencia"
+    />
+
+    <BaseModal :aberto="configuracoesAbertas" titulo="Configurações dos Animais" @fechar="fecharConfiguracoes">
+      <div class="space-y-5">
+        <div class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+          <div class="text-sm font-semibold text-slate-900">Layout das informações</div>
+          <div class="mt-1 text-xs text-slate-500">
+            Escolha como a tabela e o formulário dos animais devem ser exibidos neste leilão.
+          </div>
+
+          <div class="mt-4 grid gap-3">
+            <label class="flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 bg-white p-4 transition hover:border-blue-300 hover:bg-blue-50/40">
+              <input v-model="layoutModoDraft" type="radio" value="AGREGADAS" class="mt-1 h-4 w-4" />
+              <div>
+                <div class="text-sm font-semibold text-slate-900">Informações agregadas</div>
+                <div class="text-xs text-slate-500">
+                  Mantém o bloco único de informações, como já funciona hoje.
+                </div>
+              </div>
+            </label>
+
+            <label class="flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 bg-white p-4 transition hover:border-blue-300 hover:bg-blue-50/40">
+              <input v-model="layoutModoDraft" type="radio" value="SEPARADAS" class="mt-1 h-4 w-4" />
+              <div>
+                <div class="text-sm font-semibold text-slate-900">Informações separadas</div>
+                <div class="text-xs text-slate-500">
+                  Mostra raça, sexo, pelagem e nascimento em campos e colunas distintas.
+                </div>
+              </div>
+            </label>
+          </div>
+        </div>
+
+        <div
+          v-if="layoutModoDraft === 'AGREGADAS'"
+          class="rounded-2xl border border-slate-200 bg-slate-50 p-4"
+        >
+          <label class="flex cursor-pointer items-start gap-3">
+            <input v-model="incluirRacaDraft" type="checkbox" class="mt-1 h-4 w-4 rounded" />
+            <div>
+              <div class="text-sm font-semibold text-slate-900">Incluir raça nas importações</div>
+              <div class="text-xs text-slate-500">
+                Vale só para importação. Quando marcado, a raça entra no começo de
+                <span class="font-semibold">Informações</span>.
+              </div>
+            </div>
+          </label>
+        </div>
+      </div>
+
+      <template #footer>
+        <BaseButton variante="secundario" @click="fecharConfiguracoes">Cancelar</BaseButton>
+        <BaseButton variante="primario" @click="salvarConfiguracoes">Salvar</BaseButton>
+      </template>
+    </BaseModal>
+
+    <BaseModal :aberto="limparAberto" titulo="Limpar animais" @fechar="fecharLimpar">
+      <div class="space-y-4">
+        <div class="rounded-2xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+          Isso vai apagar todos os animais deste leilão. Essa ação não pode ser desfeita.
+        </div>
+
+        <div class="space-y-2">
+          <label class="block text-xs font-semibold uppercase tracking-[0.18em] text-slate-500">
+            Digite <span class="text-red-600">LIMPAR</span> para confirmar
+          </label>
+          <input
+            v-model="confirmacaoLimpar"
+            type="text"
+            class="w-full rounded-2xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+            @input="applyUppercaseInput($event, (value) => (confirmacaoLimpar = value))"
+          />
+        </div>
+      </div>
+
+      <template #footer>
+        <BaseButton variante="secundario" @click="fecharLimpar">Cancelar</BaseButton>
+        <BaseButton
+          variante="perigo"
+          :disabled="confirmacaoLimpar !== 'LIMPAR' || limpandoTudo"
+          @click="confirmarLimpar"
+        >
+          {{ limpandoTudo ? 'Apagando...' : 'Apagar todos' }}
+        </BaseButton>
+      </template>
+    </BaseModal>
   </div>
 </template>

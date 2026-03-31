@@ -4,6 +4,10 @@ export async function listarLeiloes(): Promise<Leilao[]> {
   return window.leiloes.listar()
 }
 
+export async function obterLeilao(id: string): Promise<Leilao | null> {
+  return window.leiloes.obter(id)
+}
+
 export async function criarLeilao(payload: LeilaoCriarPayload): Promise<Leilao> {
   return window.leiloes.criar(payload)
 }

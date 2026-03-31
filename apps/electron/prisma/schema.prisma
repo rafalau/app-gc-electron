@@ -4,7 +4,6 @@ generator client {
 
 datasource db {
   provider = "sqlite"
-  url      = env("DATABASE_URL")
 }
 
 model Leilao {
@@ -15,7 +14,36 @@ model Leilao {
   usa_dolar               Boolean  @default(false)
   cotacao                 Float?
   multiplicador           Float
+  animais                 Animal[]
 
   criado_em               DateTime @default(now())
   atualizado_em           DateTime @updatedAt
+}
+
+model Animal {
+  id            String   @id @default(cuid())
+  leilao_id     String
+  ordem         Int      @default(0)
+  lote          String
+  nome          String
+  categoria     String   @default("")
+  informacoes   String   @default("")
+  genealogia    String   @default("")
+  condicoes_cobertura String @default("[]")
+  raca          String   @default("")
+  sexo          String   @default("")
+  pelagem       String   @default("")
+  nascimento    String   @default("")
+  idade         String   @default("")
+  peso          String   @default("")
+  proprietario  String   @default("")
+  condicoes_pagamento_especificas String @default("")
+  observacoes   String   @default("")
+
+  leilao        Leilao   @relation(fields: [leilao_id], references: [id], onDelete: Cascade)
+
+  criado_em     DateTime @default(now())
+  atualizado_em DateTime @updatedAt
+
+  @@index([leilao_id, ordem])
 }

@@ -2,6 +2,7 @@
 import { ref } from 'vue'
 import BaseDropdown from '../ui/BaseDropdown.vue'
 import type { Leilao } from '@renderer/types/leilao'
+import { applyUppercaseInput } from '@renderer/utils/uppercaseInput'
 
 const props = defineProps<{
   leiloes: Leilao[]
@@ -64,7 +65,7 @@ function cancelarExclusao() {
     <div
       class="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-4 py-2.5 grid grid-cols-12 text-xs md:text-sm font-semibold"
     >
-      <div class="col-span-2">DATA</div>
+      <div class="col-span-2 text-center">DATA</div>
       <div class="col-span-6">NOME DO EVENTO</div>
       <div class="col-span-2 text-center">ANIMAIS</div>
       <div class="col-span-2 text-center">AÇÕES</div>
@@ -82,7 +83,7 @@ function cancelarExclusao() {
         class="px-4 py-2.5 grid grid-cols-12 items-center border-t border-gray-100 hover:bg-blue-50 transition-colors relative"
       >
         <!-- Data -->
-        <div class="col-span-2">
+        <div class="col-span-2 flex justify-center">
           <span
             class="inline-flex px-2 py-1 rounded-lg bg-gray-100 border border-gray-200 text-xs font-medium text-gray-700"
           >
@@ -93,20 +94,18 @@ function cancelarExclusao() {
         <!-- Nome do Evento -->
         <div class="col-span-6">
           <div class="font-semibold text-gray-900 text-sm">{{ l.titulo_evento }}</div>
-          <div class="text-xs text-gray-500 mt-0.5">
-            Mult: <span class="font-medium">{{ l.multiplicador }}</span>
-            <span v-if="l.usa_dolar" class="ml-2">• Cot: {{ l.cotacao }}</span>
-          </div>
         </div>
 
         <!-- Animais -->
         <div class="col-span-2 text-center">
-          <span
-            class="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-green-50 border border-green-200 text-xs font-medium text-green-700"
+          <button
+            type="button"
+            class="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-green-50 border border-green-200 text-xs font-medium text-green-700 transition-colors hover:bg-green-100 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-1"
+            @click="emit('animais', l)"
           >
             <i class="fas fa-horse-head text-xs" />
-            0
-          </span>
+            {{ l.total_animais }}
+          </button>
         </div>
 
         <!-- Ações -->
@@ -149,6 +148,7 @@ function cancelarExclusao() {
               type="text"
               class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500 focus:border-transparent"
               placeholder="Digite EXCLUIR"
+              @input="applyUppercaseInput($event, (value) => (confirmacaoTexto = value))"
             />
           </div>
         </div>

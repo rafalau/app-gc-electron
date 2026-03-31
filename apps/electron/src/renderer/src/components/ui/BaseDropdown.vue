@@ -52,24 +52,41 @@ function getColorClass(color?: 'default' | 'danger') {
       <i :class="['fas text-xs', isOpen ? 'fa-chevron-up' : 'fa-chevron-down']" />
     </button>
 
-    <div
-      v-if="isOpen"
-      class="absolute right-0 mt-1 w-56 bg-white border border-gray-200 rounded-lg shadow-xl z-50"
-    >
-      <button
-        v-for="(item, index) in items"
-        :key="index"
-        type="button"
-        :class="[
-          'w-full text-left px-4 py-2 text-sm font-medium transition-colors flex items-center gap-2',
-          getColorClass(item.color),
-          index < items.length - 1 ? 'border-b border-gray-100' : ''
-        ]"
-        @click="handleItemClick(item)"
+    <Transition name="dropdown-pop">
+      <div
+        v-if="isOpen"
+        class="absolute right-0 mt-1 w-56 origin-top-right bg-white border border-gray-200 rounded-lg shadow-xl z-50"
       >
-        <i v-if="item.icon" :class="['fas text-sm', item.icon]" />
-        {{ item.label }}
-      </button>
-    </div>
+        <button
+          v-for="(item, index) in items"
+          :key="index"
+          type="button"
+          :class="[
+            'w-full text-left px-4 py-2 text-sm font-medium transition-colors flex items-center gap-2',
+            getColorClass(item.color),
+            index < items.length - 1 ? 'border-b border-gray-100' : ''
+          ]"
+          @click="handleItemClick(item)"
+        >
+          <i v-if="item.icon" :class="['fas text-sm', item.icon]" />
+          {{ item.label }}
+        </button>
+      </div>
+    </Transition>
   </div>
 </template>
+
+<style scoped>
+.dropdown-pop-enter-active,
+.dropdown-pop-leave-active {
+  transition:
+    transform 180ms ease,
+    opacity 160ms ease;
+}
+
+.dropdown-pop-enter-from,
+.dropdown-pop-leave-to {
+  opacity: 0;
+  transform: translateY(-6px) scale(0.98);
+}
+</style>

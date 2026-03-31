@@ -1,6 +1,7 @@
 import { app } from 'electron'
 import { join } from 'path'
 import { PrismaClient } from '@prisma/client'
+import { PrismaBetterSqlite3 } from '@prisma/adapter-better-sqlite3'
 
 let prisma: PrismaClient | null = null
 let initPromise: Promise<PrismaClient> | null = null
@@ -26,12 +27,12 @@ export async function getPrisma() {
   initPromise = (async () => {
     ensureDatabaseUrl()
 
+    const adapter = new PrismaBetterSqlite3({
+      url: process.env.DATABASE_URL!
+    })
+
     const p = new PrismaClient({
-      datasources: {
-        db: {
-          url: process.env.DATABASE_URL!
-        }
-      }
+      adapter
     })
 
     prisma = p

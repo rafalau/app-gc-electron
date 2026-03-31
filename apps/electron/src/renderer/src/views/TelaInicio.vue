@@ -5,6 +5,7 @@ import LeilaoModal from '@renderer/components/leilao/LeilaoModal.vue'
 import BaseButton from '@renderer/components/ui/BaseButton.vue'
 import { useLeiloes } from '@renderer/composables/useLeiloes'
 import type { Leilao } from '@renderer/types/leilao'
+import { applyUppercaseInput } from '@renderer/utils/uppercaseInput'
 
 const router = useRouter()
 
@@ -27,10 +28,25 @@ const {
 function irAnimais(leilao: Leilao) {
   router.push(`/leilao/${leilao.id}`)
 }
+
+async function voltarSelecaoModo() {
+  await window.config.setModo(null)
+  router.replace('/modo')
+}
 </script>
 
 <template>
   <div class="p-4 md:p-6 lg:p-8 min-h-screen bg-blue-50">
+    <div class="mb-4">
+      <button
+        class="text-sm text-blue-700 hover:text-blue-900 font-medium"
+        type="button"
+        @click="voltarSelecaoModo"
+      >
+        ← Voltar para seleção de modo
+      </button>
+    </div>
+
     <!-- Cabeçalho com Busca e Botão -->
     <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-3 mb-3">
       <div class="flex-1 w-full md:max-w-md relative">
@@ -39,6 +55,7 @@ function irAnimais(leilao: Leilao) {
           v-model="busca"
           class="w-full border bg-white border-gray-300 rounded-lg pl-10 pr-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           type="text"
+          @input="applyUppercaseInput($event, (value) => (busca = value))"
         />
       </div>
 
