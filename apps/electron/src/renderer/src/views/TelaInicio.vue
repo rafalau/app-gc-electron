@@ -29,6 +29,10 @@ function irAnimais(leilao: Leilao) {
   router.push(`/leilao/${leilao.id}`)
 }
 
+function irOperacao(leilao: Leilao) {
+  router.push(`/operacao/${leilao.id}`)
+}
+
 async function voltarSelecaoModo() {
   await window.config.setModo(null)
   router.replace('/modo')
@@ -93,6 +97,7 @@ async function voltarSelecaoModo() {
       @editar="abrirEditar"
       @excluir="excluir"
       @animais="irAnimais"
+      @operacao="irOperacao"
     />
 
     <!-- Modal -->

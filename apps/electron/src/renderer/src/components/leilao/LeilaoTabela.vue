@@ -12,6 +12,7 @@ const emit = defineEmits<{
   (e: 'editar', leilao: Leilao): void
   (e: 'excluir', leilao: Leilao): void
   (e: 'animais', leilao: Leilao): void
+  (e: 'operacao', leilao: Leilao): void
 }>()
 
 const showConfirmDelete = ref<string | null>(null)
@@ -34,6 +35,11 @@ function getDropdownItems(leilao: Leilao) {
       label: 'Editar Evento',
       icon: 'fa-edit',
       action: () => emit('editar', leilao)
+    },
+    {
+      label: 'Modo Operação',
+      icon: 'fa-broadcast-tower',
+      action: () => emit('operacao', leilao)
     },
     {
       label: 'Excluir evento',

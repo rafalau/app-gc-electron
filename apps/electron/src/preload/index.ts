@@ -30,6 +30,51 @@ type AnimalCriarPayload = {
 
 type AnimalAtualizarPayload = Partial<Omit<AnimalCriarPayload, 'leilao_id'>>
 
+type Leilao = {
+  id: string
+  titulo_evento: string
+  data: string
+  condicoes_de_pagamento: string
+  usa_dolar: boolean
+  cotacao: number | null
+  multiplicador: number
+  total_animais: number
+  criado_em: string
+  atualizado_em: string
+}
+
+type Animal = {
+  id: string
+  leilao_id: string
+  lote: string
+  nome: string
+  categoria: string
+  vendedor: string
+  condicoes_pagamento_especificas: string
+  raca: string
+  sexo: string
+  pelagem: string
+  nascimento: string
+  informacoes: string
+  genealogia: string
+  condicoes_cobertura: string[]
+  criado_em: string
+  atualizado_em: string
+}
+
+type OperacaoEstadoPayload = {
+  leilao: Leilao | null
+  animal: Animal | null
+  layout_modo: 'AGREGADAS' | 'SEPARADAS'
+  lance_digitado: string
+  lance_atual: string
+  lance_atual_centavos: number
+  lance_dolar: string
+  total_real: string
+  total_dolar: string
+  atualizado_em: string
+}
+
 // Custom APIs for renderer
 const api = {}
 
@@ -41,6 +86,25 @@ if (process.contextIsolated) {
     contextBridge.exposeInMainWorld('config', {
       setModo: (modo: 'HOST' | 'REMOTO' | null) => ipcRenderer.invoke('config:setModo', modo),
       getModo: () => ipcRenderer.invoke('config:getModo'),
+      getVmix: () => ipcRenderer.invoke('config:getVmix'),
+      setVmix: (vmix: {
+        ativo: boolean
+        ip: string
+        porta: number
+        inputSelecionado: { key: string; number: string; title: string; type: string } | null
+      }) => ipcRenderer.invoke('config:setVmix', vmix),
+      listarInputsVmix: (vmix: {
+        ativo: boolean
+        ip: string
+        porta: number
+        inputSelecionado: { key: string; number: string; title: string; type: string } | null
+      }) => ipcRenderer.invoke('config:listarInputsVmix', vmix),
+      acionarOverlayVmix: (vmix: {
+        ativo: boolean
+        ip: string
+        porta: number
+        inputSelecionado: { key: string; number: string; title: string; type: string } | null
+      }) => ipcRenderer.invoke('config:acionarOverlayVmix', vmix),
       getLayoutAnimais: (leilaoId: string) => ipcRenderer.invoke('config:getLayoutAnimais', leilaoId),
       setLayoutAnimais: (
         leilaoId: string,
@@ -90,6 +154,18 @@ if (process.contextIsolated) {
     contextBridge.exposeInMainWorld('studbook', {
       buscar: (term: string) => ipcRenderer.invoke('studbook:buscar', term),
       importar: (registro: string) => ipcRenderer.invoke('studbook:importar', registro)
+    })
+
+    contextBridge.exposeInMainWorld('operacao', {
+      obterArquivo: (leilaoId: string) => ipcRenderer.invoke('operacao:obterArquivo', leilaoId),
+      obterEstado: (leilaoId: string) => ipcRenderer.invoke('operacao:obterEstado', leilaoId),
+      atualizarArquivo: (leilaoId: string, payload: OperacaoEstadoPayload) =>
+        ipcRenderer.invoke('operacao:atualizarArquivo', leilaoId, payload)
+    })
+
+    contextBridge.exposeInMainWorld('janela', {
+      definirPreset: (preset: 'DESKTOP' | 'OPERACAO') =>
+        ipcRenderer.invoke('janela:definirPreset', preset)
     })
   } catch (error) {
     console.error(error)

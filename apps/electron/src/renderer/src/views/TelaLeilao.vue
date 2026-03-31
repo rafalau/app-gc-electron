@@ -11,6 +11,7 @@ import TbsImportModal from '@renderer/components/animal/TbsImportModal.vue'
 import Remate360ImportModal from '@renderer/components/animal/Remate360ImportModal.vue'
 import ImportSummaryModal from '@renderer/components/animal/ImportSummaryModal.vue'
 import { useAnimais } from '@renderer/composables/useAnimais'
+import type { Animal } from '@renderer/types/animal'
 import { applyUppercaseInput } from '@renderer/utils/uppercaseInput'
 
 const router = useRouter()
@@ -143,6 +144,13 @@ async function salvarConfiguracoes() {
   await salvarConfiguracaoLayout(layoutModoDraft.value, incluirRacaDraft.value)
   configuracoesAbertas.value = false
 }
+
+function abrirModoOperacao(animal?: Animal) {
+  router.push({
+    path: `/operacao/${leilaoId}`,
+    query: animal ? { animalId: animal.id } : {}
+  })
+}
 </script>
 
 <template>
@@ -192,6 +200,15 @@ async function salvarConfiguracoes() {
         >
           <i class="fas fa-clipboard-check mr-1" />
           Modo Conferência
+        </BaseButton>
+        <BaseButton
+          v-if="leilao && leilao.total_animais > 0"
+          variante="secundario"
+          class="w-full sm:w-auto"
+          @click="abrirModoOperacao()"
+        >
+          <i class="fas fa-broadcast-tower mr-1" />
+          Modo Operação
         </BaseButton>
         <BaseButton
           v-if="leilao && leilao.total_animais > 0"

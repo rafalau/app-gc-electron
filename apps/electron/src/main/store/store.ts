@@ -1,8 +1,31 @@
 type StoreSchema = {
   modo: 'HOST' | 'REMOTO' | null
+  vmix: {
+    ativo: boolean
+    ip: string
+    porta: number
+    inputSelecionado: {
+      key: string
+      number: string
+      title: string
+      type: string
+    } | null
+  }
   layoutAnimaisPorLeilao: Record<
     string,
     { modo: 'AGREGADAS' | 'SEPARADAS'; incluirRacaNasImportacoes: boolean }
+  >
+  operacaoPorLeilao: Record<
+    string,
+    {
+      animalId: string | null
+      layoutModo: 'AGREGADAS' | 'SEPARADAS'
+      lanceAtual: string
+      lanceAtualCentavos: number
+      lanceDolar: string
+      totalReal: string
+      totalDolar: string
+    }
   >
 }
 
@@ -26,7 +49,14 @@ export async function getStore() {
     name: 'config',
     defaults: {
       modo: null,
-      layoutAnimaisPorLeilao: {}
+      vmix: {
+        ativo: false,
+        ip: '',
+        porta: 8088,
+        inputSelecionado: null
+      },
+      layoutAnimaisPorLeilao: {},
+      operacaoPorLeilao: {}
     }
   })
 

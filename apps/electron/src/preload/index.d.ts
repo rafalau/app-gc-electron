@@ -100,11 +100,57 @@ export type LayoutAnimaisConfig = {
   incluirRacaNasImportacoes: boolean
 }
 
+export type VmixConfig = {
+  ativo: boolean
+  ip: string
+  porta: number
+  inputSelecionado: VmixInput | null
+}
+
+export type VmixInput = {
+  number: string
+  title: string
+  type: string
+  key: string
+}
+
+export type OperacaoEstadoPayload = {
+  leilao: Leilao | null
+  animal: Animal | null
+  layout_modo: 'AGREGADAS' | 'SEPARADAS'
+  lance_digitado: string
+  lance_atual: string
+  lance_atual_centavos: number
+  lance_dolar: string
+  total_real: string
+  total_dolar: string
+  atualizado_em: string
+}
+
+export type OperacaoArquivoInfo = {
+  url_http: string
+  urls_http: string[]
+}
+
+export type OperacaoEstadoPersistido = {
+  animalId: string | null
+  layoutModo: 'AGREGADAS' | 'SEPARADAS'
+  lanceAtual: string
+  lanceAtualCentavos: number
+  lanceDolar: string
+  totalReal: string
+  totalDolar: string
+}
+
 declare global {
   interface Window {
     config: {
       setModo: (modo: 'HOST' | 'REMOTO' | null) => Promise<void>
       getModo: () => Promise<'HOST' | 'REMOTO' | null>
+      getVmix: () => Promise<VmixConfig>
+      setVmix: (vmix: VmixConfig) => Promise<void>
+      listarInputsVmix: (vmix: VmixConfig) => Promise<VmixInput[]>
+      acionarOverlayVmix: (vmix: VmixConfig) => Promise<{ ok: boolean }>
       getLayoutAnimais: (leilaoId: string) => Promise<LayoutAnimaisConfig>
       setLayoutAnimais: (leilaoId: string, layout: LayoutAnimaisConfig) => Promise<void>
     }
@@ -144,6 +190,17 @@ declare global {
     studbook: {
       buscar: (term: string) => Promise<StudbookSearchResult[]>
       importar: (registro: string) => Promise<StudbookImportPayload>
+    }
+    operacao: {
+      obterArquivo: (leilaoId: string) => Promise<OperacaoArquivoInfo>
+      obterEstado: (leilaoId: string) => Promise<OperacaoEstadoPersistido | null>
+      atualizarArquivo: (
+        leilaoId: string,
+        payload: OperacaoEstadoPayload
+      ) => Promise<OperacaoArquivoInfo>
+    }
+    janela: {
+      definirPreset: (preset: 'DESKTOP' | 'OPERACAO') => Promise<void>
     }
   }
 }

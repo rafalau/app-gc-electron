@@ -4,6 +4,7 @@ import TelaModo from '../views/TelaModo.vue'
 import TelaInicio from '../views/TelaInicio.vue'
 import TelaConfiguracoes from '../views/TelaConfiguracoes.vue'
 import TelaLeilao from '../views/TelaLeilao.vue'
+import TelaOperacao from '../views/TelaOperacao.vue'
 
 export const router = createRouter({
   history: createWebHashHistory(),
@@ -12,7 +13,8 @@ export const router = createRouter({
     { path: '/modo', component: TelaModo },
     { path: '/inicio', component: TelaInicio },
     { path: '/configuracoes', component: TelaConfiguracoes },
-    { path: '/leilao/:id', component: TelaLeilao }
+    { path: '/leilao/:id', component: TelaLeilao },
+    { path: '/operacao/:id', component: TelaOperacao }
   ]
 })
 

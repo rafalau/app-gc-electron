@@ -15,6 +15,7 @@ model Leilao {
   cotacao                 Float?
   multiplicador           Float
   animais                 Animal[]
+  operacao_estado         OperacaoEstado?
 
   criado_em               DateTime @default(now())
   atualizado_em           DateTime @updatedAt
@@ -46,4 +47,18 @@ model Animal {
   atualizado_em DateTime @updatedAt
 
   @@index([leilao_id, ordem])
+}
+
+model OperacaoEstado {
+  leilao_id             String   @id
+  animal_id             String?
+  layout_modo           String   @default("AGREGADAS")
+  lance_atual           String   @default("0,00")
+  lance_atual_centavos  Int      @default(0)
+  lance_dolar           String   @default("0,00")
+  total_real            String   @default("0,00")
+  total_dolar           String   @default("0,00")
+  atualizado_em         DateTime @updatedAt
+
+  leilao                Leilao   @relation(fields: [leilao_id], references: [id], onDelete: Cascade)
 }
