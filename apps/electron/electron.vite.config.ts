@@ -3,8 +3,13 @@ import { defineConfig, externalizeDepsPlugin, bytecodePlugin } from 'electron-vi
 import vue from '@vitejs/plugin-vue'
 import tailwindcss from '@tailwindcss/vite'
 
+const appMode = process.env.APP_MODE ?? ''
+
 export default defineConfig({
   main: {
+    define: {
+      __APP_MODE__: JSON.stringify(appMode)
+    },
     plugins: [externalizeDepsPlugin(), bytecodePlugin()],
     build: {
       rollupOptions: {
@@ -21,9 +26,15 @@ export default defineConfig({
     }
   },
   preload: {
+    define: {
+      __APP_MODE__: JSON.stringify(appMode)
+    },
     plugins: [externalizeDepsPlugin(), bytecodePlugin()]
   },
   renderer: {
+    define: {
+      __APP_MODE__: JSON.stringify(appMode)
+    },
     resolve: {
       alias: {
         '@renderer': resolve('src/renderer/src')

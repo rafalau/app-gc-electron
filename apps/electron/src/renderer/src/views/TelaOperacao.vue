@@ -11,11 +11,13 @@ import { applyUppercaseInput } from '@renderer/utils/uppercaseInput'
 import { parseInformacoesAgregadas } from '@renderer/utils/animalInformacoes'
 import type {
   OperacaoArquivoInfo,
+  OperacaoConexaoInfo,
   OperacaoEstadoPayload
 } from '@renderer/types/operacao'
 import {
   atualizarArquivoOperacao,
   obterArquivoOperacao,
+  obterConexaoOperacao,
   obterEstadoOperacao
 } from '@renderer/services/operacao.service'
 import {
@@ -77,8 +79,12 @@ const srtPlayerMutado = ref(false)
 const inputsVmix = ref<VmixInput[]>([])
 const seletorAnimalRef = ref<HTMLDivElement | null>(null)
 const srtPlayerHostRef = ref<HTMLDivElement | null>(null)
+const conexaoOperacao = ref<OperacaoConexaoInfo | null>(null)
 let srtResizeObserver: ResizeObserver | null = null
 let srtScrollSyncHandler: (() => void) | null = null
+let operacaoEventSource: EventSource | null = null
+let aplicandoEstadoExterno = false
+let ultimaAssinaturaOperacao = ''
 const formVmix = ref<VmixConfig>({
   ativo: false,
   ip: '',
@@ -179,6 +185,89 @@ const endpointSrt = computed(() => {
 })
 function voltar() {
   router.push(`/leilao/${leilaoId}`)
+}
+
+function assinarEstadoOperacao(payload: {
+  animalId: string | null
+  lanceDigitado: string
+  layoutModo: 'AGREGADAS' | 'SEPARADAS'
+  lanceAtual: string
+  lanceAtualCentavos: number
+  lanceDolar: string
+  totalReal: string
+  totalDolar: string
+}) {
+  return JSON.stringify(payload)
+}
+
+async function aplicarEstadoOperacaoExterno(estado: {
+  animalId: string | null
+  lanceDigitado: string
+  layoutModo: 'AGREGADAS' | 'SEPARADAS'
+  lanceAtual: string
+  lanceAtualCentavos: number
+  lanceDolar: string
+  totalReal: string
+  totalDolar: string
+} | null) {
+  if (!estado) return
+
+  const assinatura = assinarEstadoOperacao(estado)
+  if (assinatura === ultimaAssinaturaOperacao) return
+
+  aplicandoEstadoExterno = true
+  ultimaAssinaturaOperacao = assinatura
+  animalSelecionadoId.value = estado.animalId ?? ''
+  layoutInformacoesModo.value = estado.layoutModo
+  lanceDigitado.value = estado.lanceDigitado ?? ''
+  lanceAtual.value = estado.lanceAtual ?? '0,00'
+  lanceAtualCentavos.value = estado.lanceAtualCentavos ?? 0
+  await nextTick()
+  aplicandoEstadoExterno = false
+}
+
+async function iniciarRealtimeOperacao() {
+  if (operacaoEventSource) {
+    operacaoEventSource.close()
+    operacaoEventSource = null
+  }
+
+  conexaoOperacao.value = await obterConexaoOperacao()
+  const source = new EventSource(
+    `${conexaoOperacao.value.baseUrl}/operacao/events/${encodeURIComponent(leilaoId)}`
+  )
+
+  source.onmessage = (event) => {
+    try {
+      const estado = JSON.parse(event.data) as {
+        animalId: string | null
+        lanceDigitado: string
+        layoutModo: 'AGREGADAS' | 'SEPARADAS'
+        lanceAtual: string
+        lanceAtualCentavos: number
+        lanceDolar: string
+        totalReal: string
+        totalDolar: string
+      } | null
+      void aplicarEstadoOperacaoExterno(estado)
+    } catch (error) {
+      console.error(error)
+    }
+  }
+
+  source.onerror = () => {
+    erroOperacao.value = 'Falha na sincronização em tempo real da operação.'
+    if (conexaoOperacao.value?.modo === 'REMOTO') {
+      source.close()
+      operacaoEventSource = null
+      router.replace({
+        path: '/conexao',
+        query: { erro: 'nao-foi-possivel-conectar-ao-host' }
+      })
+    }
+  }
+
+  operacaoEventSource = source
 }
 
 async function abrirModalConfiguracao() {
@@ -573,6 +662,7 @@ async function copiarTexto(texto: string, alvo: 'caminho') {
 }
 
 async function sincronizarArquivo() {
+  if (aplicandoEstadoExterno) return
   if (!arquivoInfo.value) return
   if (carregando.value) return
   if (!leilao.value) return
@@ -597,6 +687,16 @@ async function sincronizarArquivo() {
       total_dolar: totalDolarFormatado.value,
       atualizado_em: new Date().toISOString()
     }
+    ultimaAssinaturaOperacao = assinarEstadoOperacao({
+      animalId: payload.animal?.id ?? null,
+      lanceDigitado: payload.lance_digitado,
+      layoutModo: payload.layout_modo,
+      lanceAtual: payload.lance_atual,
+      lanceAtualCentavos: payload.lance_atual_centavos,
+      lanceDolar: payload.lance_dolar,
+      totalReal: payload.total_real,
+      totalDolar: payload.total_dolar
+    })
 
     arquivoInfo.value = await atualizarArquivoOperacao(leilaoId, payload)
     erroOperacao.value = ''
@@ -628,6 +728,7 @@ watch(
 )
 
 watch(animalSelecionadoId, () => {
+  if (aplicandoEstadoExterno) return
   resetarLances()
   void sincronizarArquivo()
 })
@@ -641,6 +742,7 @@ watch(carregando, (value) => {
 })
 
 watch(layoutInformacoesModo, () => {
+  if (aplicandoEstadoExterno) return
   void sincronizarArquivo()
 })
 
@@ -650,13 +752,24 @@ watch(algumModalAberto, () => {
 
 onMounted(async () => {
   await window.janela.definirPreset('OPERACAO')
-  formVmix.value = await obterConfiguracaoVmix()
-  arquivoInfo.value = await obterArquivoOperacao(leilaoId)
-  const estado = await obterEstadoOperacao(leilaoId)
-  if (estado) {
-    if (estado.animalId) selecionarAnimalOperacao(estado.animalId)
-    lanceAtual.value = estado.lanceAtual ?? '0,00'
-    lanceAtualCentavos.value = estado.lanceAtualCentavos ?? 0
+  try {
+    formVmix.value = await obterConfiguracaoVmix()
+    arquivoInfo.value = await obterArquivoOperacao(leilaoId)
+    const estado = await obterEstadoOperacao(leilaoId)
+    if (estado) {
+      await aplicarEstadoOperacaoExterno(estado)
+    }
+    await iniciarRealtimeOperacao()
+  } catch (error) {
+    erroOperacao.value = (error as Error).message
+    const conexao = await obterConexaoOperacao()
+    if (conexao.modo === 'REMOTO') {
+      router.replace({
+        path: '/conexao',
+        query: { erro: 'nao-foi-possivel-conectar-ao-host' }
+      })
+      return
+    }
   }
   await pararPreviewSrt()
   await sincronizarPlaybackSrtPlayer()
@@ -701,6 +814,10 @@ onUnmounted(() => {
   if (srtScrollSyncHandler) {
     window.removeEventListener('scroll', srtScrollSyncHandler, true)
     srtScrollSyncHandler = null
+  }
+  if (operacaoEventSource) {
+    operacaoEventSource.close()
+    operacaoEventSource = null
   }
   void desligarSrtPlayer()
   void pararPreviewSrt()

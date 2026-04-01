@@ -21,10 +21,19 @@ export type OperacaoArquivoInfo = {
 
 export type OperacaoEstadoPersistido = {
   animalId: string | null
+  lanceDigitado: string
   layoutModo: 'AGREGADAS' | 'SEPARADAS'
   lanceAtual: string
   lanceAtualCentavos: number
   lanceDolar: string
   totalReal: string
   totalDolar: string
+}
+
+export type OperacaoConexaoInfo = {
+  modo: 'HOST' | 'REMOTO' | null
+  hostIp: string
+  porta: number
+  baseUrl: string
+  ipsDisponiveis: string[]
 }

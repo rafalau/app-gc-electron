@@ -1,6 +1,12 @@
 import { ipcMain } from 'electron'
 import { randomUUID } from 'crypto'
 import { getPrisma } from '../db/prisma'
+import {
+  ensureOperacaoServer,
+  fetchRemotoJson,
+  getModoConexaoOperacao,
+  publicarSyncEvento
+} from './operacao'
 
 type AnimalCriarPayload = {
   leilao_id: string
@@ -143,190 +149,264 @@ function serializar(animal: any) {
   }
 }
 
+export async function listarAnimaisPorLeilaoLocal(leilaoId: string) {
+  const prisma = await getPrisma()
+  const animais = await prisma.$queryRawUnsafe<any[]>(
+    `
+      SELECT
+        id,
+        leilao_id,
+        lote,
+        nome,
+        categoria,
+        proprietario,
+        condicoes_pagamento_especificas,
+        raca,
+        sexo,
+        pelagem,
+        nascimento,
+        informacoes,
+        genealogia,
+        condicoes_cobertura,
+        criado_em,
+        atualizado_em
+      FROM Animal
+      WHERE leilao_id = ?
+      ORDER BY criado_em ASC
+    `,
+    leilaoId
+  )
+  animais.sort((a, b) => compararLote(a.lote, b.lote))
+  return animais.map(serializar)
+}
+
+export async function criarAnimalLocal(payload: AnimalCriarPayload) {
+  const prisma = await getPrisma()
+  const payloadNormalizado = normalizarPayloadCriar(payload)
+  const id = randomUUID()
+  const agora = new Date().toISOString()
+
+  await prisma.$executeRawUnsafe(
+    `
+      INSERT INTO Animal (
+        id,
+        leilao_id,
+        lote,
+        nome,
+        categoria,
+        proprietario,
+        condicoes_pagamento_especificas,
+        raca,
+        sexo,
+        pelagem,
+        nascimento,
+        informacoes,
+        genealogia,
+        condicoes_cobertura,
+        criado_em,
+        atualizado_em
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `,
+    id,
+    payloadNormalizado.leilao_id,
+    payloadNormalizado.lote,
+    payloadNormalizado.nome,
+    payloadNormalizado.categoria ?? 'ANIMAIS',
+    payloadNormalizado.vendedor ?? '',
+    payloadNormalizado.condicoes_pagamento_especificas ?? '',
+    payloadNormalizado.raca ?? '',
+    payloadNormalizado.sexo ?? '',
+    payloadNormalizado.pelagem ?? '',
+    payloadNormalizado.nascimento ?? '',
+    payloadNormalizado.informacoes ?? '',
+    payloadNormalizado.genealogia ?? '',
+    JSON.stringify(payloadNormalizado.condicoes_cobertura ?? []),
+    agora,
+    agora
+  )
+
+  const [animal] = await prisma.$queryRawUnsafe<any[]>(
+    `
+      SELECT
+        id,
+        leilao_id,
+        lote,
+        nome,
+        categoria,
+        proprietario,
+        condicoes_pagamento_especificas,
+        raca,
+        sexo,
+        pelagem,
+        nascimento,
+        informacoes,
+        genealogia,
+        condicoes_cobertura,
+        criado_em,
+        atualizado_em
+      FROM Animal
+      WHERE id = ?
+    `,
+    id
+  )
+
+  return serializar(animal)
+}
+
+export async function atualizarAnimalLocal(id: string, payload: AnimalAtualizarPayload) {
+  const prisma = await getPrisma()
+  const payloadNormalizado = normalizarPayloadAtualizar(payload)
+  const atual = new Date().toISOString()
+
+  await prisma.$executeRawUnsafe(
+    `
+      UPDATE Animal
+      SET
+        lote = COALESCE(?, lote),
+        nome = COALESCE(?, nome),
+        categoria = COALESCE(?, categoria),
+        proprietario = COALESCE(?, proprietario),
+        condicoes_pagamento_especificas = COALESCE(?, condicoes_pagamento_especificas),
+        raca = COALESCE(?, raca),
+        sexo = COALESCE(?, sexo),
+        pelagem = COALESCE(?, pelagem),
+        nascimento = COALESCE(?, nascimento),
+        informacoes = COALESCE(?, informacoes),
+        genealogia = COALESCE(?, genealogia),
+        condicoes_cobertura = COALESCE(?, condicoes_cobertura),
+        atualizado_em = ?
+      WHERE id = ?
+    `,
+    payloadNormalizado.lote ?? null,
+    payloadNormalizado.nome ?? null,
+    payloadNormalizado.categoria ?? null,
+    payloadNormalizado.vendedor ?? null,
+    payloadNormalizado.condicoes_pagamento_especificas ?? null,
+    payloadNormalizado.raca ?? null,
+    payloadNormalizado.sexo ?? null,
+    payloadNormalizado.pelagem ?? null,
+    payloadNormalizado.nascimento ?? null,
+    payloadNormalizado.informacoes ?? null,
+    payloadNormalizado.genealogia ?? null,
+    payloadNormalizado.condicoes_cobertura
+      ? JSON.stringify(payloadNormalizado.condicoes_cobertura)
+      : null,
+    atual,
+    id
+  )
+
+  const [animal] = await prisma.$queryRawUnsafe<any[]>(
+    `
+      SELECT
+        id,
+        leilao_id,
+        lote,
+        nome,
+        categoria,
+        proprietario,
+        condicoes_pagamento_especificas,
+        raca,
+        sexo,
+        pelagem,
+        nascimento,
+        informacoes,
+        genealogia,
+        condicoes_cobertura,
+        criado_em,
+        atualizado_em
+      FROM Animal
+      WHERE id = ?
+    `,
+    id
+  )
+
+  return serializar(animal)
+}
+
+export async function removerAnimalLocal(id: string) {
+  const prisma = await getPrisma()
+  await prisma.animal.delete({ where: { id } })
+  return true
+}
+
+export async function removerAnimaisPorLeilaoLocal(leilaoId: string) {
+  const prisma = await getPrisma()
+  await prisma.animal.deleteMany({ where: { leilao_id: leilaoId } })
+  return true
+}
+
 export function registrarIpcAnimais() {
   ipcMain.handle('animais:listarPorLeilao', async (_evt, leilaoId: string) => {
-    const prisma = await getPrisma()
-    const animais = await prisma.$queryRawUnsafe<any[]>(
-      `
-        SELECT
-          id,
-          leilao_id,
-          lote,
-          nome,
-          categoria,
-          proprietario,
-          condicoes_pagamento_especificas,
-          raca,
-          sexo,
-          pelagem,
-          nascimento,
-          informacoes,
-          genealogia,
-          condicoes_cobertura,
-          criado_em,
-          atualizado_em
-        FROM Animal
-        WHERE leilao_id = ?
-        ORDER BY criado_em ASC
-      `,
-      leilaoId
-    )
-    animais.sort((a, b) => compararLote(a.lote, b.lote))
-    return animais.map(serializar)
+    const conexao = await getModoConexaoOperacao()
+    if (conexao.modo === 'REMOTO') {
+      return fetchRemotoJson(`${conexao.baseUrl}/sync/animais/${encodeURIComponent(leilaoId)}`)
+    }
+    await ensureOperacaoServer()
+    return listarAnimaisPorLeilaoLocal(leilaoId)
   })
 
   ipcMain.handle('animais:criar', async (_evt, payload: AnimalCriarPayload) => {
-    const prisma = await getPrisma()
-    const payloadNormalizado = normalizarPayloadCriar(payload)
-    const id = randomUUID()
-    const agora = new Date().toISOString()
-
-    await prisma.$executeRawUnsafe(
-      `
-        INSERT INTO Animal (
-          id,
-          leilao_id,
-          lote,
-          nome,
-          categoria,
-          proprietario,
-          condicoes_pagamento_especificas,
-          raca,
-          sexo,
-          pelagem,
-          nascimento,
-          informacoes,
-          genealogia,
-          condicoes_cobertura,
-          criado_em,
-          atualizado_em
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-      `,
-      id,
-      payloadNormalizado.leilao_id,
-      payloadNormalizado.lote,
-      payloadNormalizado.nome,
-      payloadNormalizado.categoria ?? 'ANIMAIS',
-      payloadNormalizado.vendedor ?? '',
-      payloadNormalizado.condicoes_pagamento_especificas ?? '',
-      payloadNormalizado.raca ?? '',
-      payloadNormalizado.sexo ?? '',
-      payloadNormalizado.pelagem ?? '',
-      payloadNormalizado.nascimento ?? '',
-      payloadNormalizado.informacoes ?? '',
-      payloadNormalizado.genealogia ?? '',
-      JSON.stringify(payloadNormalizado.condicoes_cobertura ?? []),
-      agora,
-      agora
-    )
-
-    const [animal] = await prisma.$queryRawUnsafe<any[]>(
-      `
-        SELECT
-          id,
-          leilao_id,
-          lote,
-          nome,
-          categoria,
-          proprietario,
-          condicoes_pagamento_especificas,
-          raca,
-          sexo,
-          pelagem,
-          nascimento,
-          informacoes,
-          genealogia,
-          condicoes_cobertura,
-          criado_em,
-          atualizado_em
-        FROM Animal
-        WHERE id = ?
-      `,
-      id
-    )
-
-    return serializar(animal)
+    const conexao = await getModoConexaoOperacao()
+    if (conexao.modo === 'REMOTO') {
+      return fetchRemotoJson(`${conexao.baseUrl}/sync/animais/${encodeURIComponent(payload.leilao_id)}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+    }
+    await ensureOperacaoServer()
+    const created = await criarAnimalLocal(payload)
+    publicarSyncEvento('leiloes')
+    publicarSyncEvento(`animais:${created.leilao_id}`)
+    return created
   })
 
   ipcMain.handle('animais:atualizar', async (_evt, id: string, payload: AnimalAtualizarPayload) => {
-    const prisma = await getPrisma()
-    const payloadNormalizado = normalizarPayloadAtualizar(payload)
-    const atual = new Date().toISOString()
-
-    await prisma.$executeRawUnsafe(
-      `
-        UPDATE Animal
-        SET
-          lote = COALESCE(?, lote),
-          nome = COALESCE(?, nome),
-          categoria = COALESCE(?, categoria),
-          proprietario = COALESCE(?, proprietario),
-          condicoes_pagamento_especificas = COALESCE(?, condicoes_pagamento_especificas),
-          raca = COALESCE(?, raca),
-          sexo = COALESCE(?, sexo),
-          pelagem = COALESCE(?, pelagem),
-          nascimento = COALESCE(?, nascimento),
-          informacoes = COALESCE(?, informacoes),
-          genealogia = COALESCE(?, genealogia),
-          condicoes_cobertura = COALESCE(?, condicoes_cobertura),
-          atualizado_em = ?
-        WHERE id = ?
-      `,
-      payloadNormalizado.lote ?? null,
-      payloadNormalizado.nome ?? null,
-      payloadNormalizado.categoria ?? null,
-      payloadNormalizado.vendedor ?? null,
-      payloadNormalizado.condicoes_pagamento_especificas ?? null,
-      payloadNormalizado.raca ?? null,
-      payloadNormalizado.sexo ?? null,
-      payloadNormalizado.pelagem ?? null,
-      payloadNormalizado.nascimento ?? null,
-      payloadNormalizado.informacoes ?? null,
-      payloadNormalizado.genealogia ?? null,
-      payloadNormalizado.condicoes_cobertura
-        ? JSON.stringify(payloadNormalizado.condicoes_cobertura)
-        : null,
-      atual,
-      id
-    )
-
-    const [animal] = await prisma.$queryRawUnsafe<any[]>(
-      `
-        SELECT
-          id,
-          leilao_id,
-          lote,
-          nome,
-          categoria,
-          proprietario,
-          condicoes_pagamento_especificas,
-          raca,
-          sexo,
-          pelagem,
-          nascimento,
-          informacoes,
-          genealogia,
-          condicoes_cobertura,
-          criado_em,
-          atualizado_em
-        FROM Animal
-        WHERE id = ?
-      `,
-      id
-    )
-
-    return serializar(animal)
+    const conexao = await getModoConexaoOperacao()
+    if (conexao.modo === 'REMOTO') {
+      return fetchRemotoJson(`${conexao.baseUrl}/sync/animal/${encodeURIComponent(id)}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+    }
+    await ensureOperacaoServer()
+    const updated = await atualizarAnimalLocal(id, payload)
+    publicarSyncEvento('leiloes')
+    publicarSyncEvento(`animais:${updated.leilao_id}`)
+    return updated
   })
 
   ipcMain.handle('animais:remover', async (_evt, id: string) => {
+    const conexao = await getModoConexaoOperacao()
+    if (conexao.modo === 'REMOTO') {
+      return fetchRemotoJson(`${conexao.baseUrl}/sync/animal/${encodeURIComponent(id)}`, {
+        method: 'DELETE'
+      })
+    }
     const prisma = await getPrisma()
-    await prisma.$executeRawUnsafe(`DELETE FROM Animal WHERE id = ?`, id)
-    return true
+    const [animal] = await prisma.$queryRawUnsafe<any[]>(
+      `SELECT leilao_id FROM Animal WHERE id = ? LIMIT 1`,
+      id
+    )
+    await ensureOperacaoServer()
+    const removed = await removerAnimalLocal(id)
+    publicarSyncEvento('leiloes')
+    if (animal?.leilao_id) publicarSyncEvento(`animais:${animal.leilao_id}`)
+    return removed
   })
 
   ipcMain.handle('animais:removerPorLeilao', async (_evt, leilaoId: string) => {
-    const prisma = await getPrisma()
-    await prisma.$executeRawUnsafe(`DELETE FROM Animal WHERE leilao_id = ?`, leilaoId)
-    return true
+    const conexao = await getModoConexaoOperacao()
+    if (conexao.modo === 'REMOTO') {
+      return fetchRemotoJson(`${conexao.baseUrl}/sync/animais-leilao/${encodeURIComponent(leilaoId)}`, {
+        method: 'DELETE'
+      })
+    }
+    await ensureOperacaoServer()
+    const removed = await removerAnimaisPorLeilaoLocal(leilaoId)
+    publicarSyncEvento('leiloes')
+    publicarSyncEvento(`animais:${leilaoId}`)
+    return removed
   })
 }

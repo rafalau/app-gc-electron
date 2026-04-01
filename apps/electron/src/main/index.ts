@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, ipcMain } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, dialog } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import icon from '../../resources/icon.png?asset'
@@ -13,6 +13,7 @@ import { registrarIpcOperacao } from './ipc/operacao'
 import { registrarIpcJanela } from './ipc/janela'
 import { registrarIpcSrtPlayer } from './ipc/srtPlayer'
 import { migrateDeploy } from './db/migrate'
+import { getStore } from './store/store'
 
 if (process.platform === 'linux') {
   // Reduz ruído de logs internos do Chromium/Electron no terminal.
@@ -35,6 +36,35 @@ function createWindow(): void {
 
   mainWindow.on('ready-to-show', () => {
     mainWindow.show()
+  })
+
+  let closingConfirmed = false
+  mainWindow.on('close', async (event) => {
+    if (closingConfirmed) return
+
+    event.preventDefault()
+
+    const store = await getStore()
+    const modo = store.get('modo')
+    const detail =
+      modo === 'HOST'
+        ? 'Ao encerrar o programa, caso alguém esteja conectado, a conexão será perdida.'
+        : 'Ao encerrar o programa, a conexão com o host será encerrada.'
+
+    const result = await dialog.showMessageBox(mainWindow, {
+      type: 'warning',
+      buttons: ['Cancelar', 'Encerrar'],
+      defaultId: 1,
+      cancelId: 0,
+      title: 'Confirmar encerramento',
+      message: 'Deseja realmente encerrar o aplicativo?',
+      detail
+    })
+
+    if (result.response === 1) {
+      closingConfirmed = true
+      mainWindow.close()
+    }
   })
 
   mainWindow.webContents.setWindowOpenHandler((details) => {

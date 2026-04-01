@@ -145,8 +145,23 @@ export type OperacaoArquivoInfo = {
   urls_http: string[]
 }
 
+export type ModoConfig = {
+  modo: 'HOST' | 'REMOTO' | null
+  hostIp: string
+  portaApp: number
+}
+
+export type OperacaoConexaoInfo = {
+  modo: 'HOST' | 'REMOTO' | null
+  hostIp: string
+  porta: number
+  baseUrl: string
+  ipsDisponiveis: string[]
+}
+
 export type OperacaoEstadoPersistido = {
   animalId: string | null
+  lanceDigitado: string
   layoutModo: 'AGREGADAS' | 'SEPARADAS'
   lanceAtual: string
   lanceAtualCentavos: number
@@ -158,8 +173,9 @@ export type OperacaoEstadoPersistido = {
 declare global {
   interface Window {
     config: {
-      setModo: (modo: 'HOST' | 'REMOTO' | null) => Promise<void>
+      setModo: (config: ModoConfig) => Promise<void>
       getModo: () => Promise<'HOST' | 'REMOTO' | null>
+      getModoConfig: () => Promise<ModoConfig>
       getVmix: () => Promise<VmixConfig>
       setVmix: (vmix: VmixConfig) => Promise<void>
       listarInputsVmix: (vmix: VmixConfig) => Promise<VmixInput[]>
@@ -212,6 +228,7 @@ declare global {
     operacao: {
       obterArquivo: (leilaoId: string) => Promise<OperacaoArquivoInfo>
       obterEstado: (leilaoId: string) => Promise<OperacaoEstadoPersistido | null>
+      obterConexao: () => Promise<OperacaoConexaoInfo>
       atualizarArquivo: (
         leilaoId: string,
         payload: OperacaoEstadoPayload

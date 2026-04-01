@@ -11,6 +11,8 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "npm -w apps/electron run dev",
+    "dev:host": "npm -w apps/electron run dev:host",
+    "dev:remoto": "npm -w apps/electron run dev:remoto",
     "build": "npm -w apps/electron run build",
     "prisma:generate": "cross-env DATABASE_URL=file:./apps/electron/prisma/dev.db prisma generate --schema apps/electron/prisma/schema.prisma",
     "prisma:migrate": "cross-env DATABASE_URL=file:./apps/electron/prisma/dev.db prisma migrate dev --schema apps/electron/prisma/schema.prisma",

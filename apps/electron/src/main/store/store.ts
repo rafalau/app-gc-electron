@@ -1,5 +1,9 @@
 type StoreSchema = {
   modo: 'HOST' | 'REMOTO' | null
+  conexaoApp: {
+    hostIp: string
+    porta: number
+  }
   vmix: {
     ativo: boolean
     ip: string
@@ -53,6 +57,10 @@ export async function getStore() {
     name: 'config',
     defaults: {
       modo: null,
+      conexaoApp: {
+        hostIp: '',
+        porta: 18452
+      },
       vmix: {
         ativo: false,
         ip: '',

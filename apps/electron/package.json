@@ -13,12 +13,22 @@
     "typecheck": "npm run typecheck:node && npm run typecheck:web",
     "start": "electron-vite preview",
     "dev": "electron-vite dev",
+    "dev:host": "cross-env APP_MODE=HOST electron-vite dev",
+    "dev:remoto": "cross-env APP_MODE=REMOTO electron-vite dev",
     "build": "npm run typecheck && electron-vite build",
+    "build:host": "cross-env APP_MODE=HOST npm run typecheck && cross-env APP_MODE=HOST electron-vite build",
+    "build:remoto": "cross-env APP_MODE=REMOTO npm run typecheck && cross-env APP_MODE=REMOTO electron-vite build",
     "install-app-deps": "electron-builder install-app-deps",
     "build:unpack": "npm run build && npm run install-app-deps && electron-builder --dir",
+    "build:unpack:host": "npm run build:host && npm run install-app-deps && cross-env APP_MODE=HOST electron-builder --dir --config electron-builder.host.yml",
+    "build:unpack:remoto": "npm run build:remoto && npm run install-app-deps && cross-env APP_MODE=REMOTO electron-builder --dir --config electron-builder.remoto.yml",
     "build:win": "npm run build && npm run install-app-deps && electron-builder --win",
+    "build:win:host": "npm run build:host && npm run install-app-deps && cross-env APP_MODE=HOST electron-builder --win --config electron-builder.host.yml",
+    "build:win:remoto": "npm run build:remoto && npm run install-app-deps && cross-env APP_MODE=REMOTO electron-builder --win --config electron-builder.remoto.yml",
     "build:mac": "npm run build && npm run install-app-deps && electron-builder --mac",
-    "build:linux": "npm run build && npm run install-app-deps && electron-builder --linux"
+    "build:linux": "npm run build && npm run install-app-deps && electron-builder --linux",
+    "build:linux:host": "npm run build:host && npm run install-app-deps && cross-env APP_MODE=HOST electron-builder --linux --config electron-builder.host.yml",
+    "build:linux:remoto": "npm run build:remoto && npm run install-app-deps && cross-env APP_MODE=REMOTO electron-builder --linux --config electron-builder.remoto.yml"
   },
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.0",

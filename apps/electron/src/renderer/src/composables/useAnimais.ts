@@ -1,4 +1,5 @@
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import { CATEGORIAS_ANIMAL, type Animal, type AnimalCriarPayload } from '../types/animal'
 import type { Leilao } from '../types/leilao'
 import type {
@@ -21,6 +22,7 @@ import {
   listarLeiloesTbs
 } from '../services/importacao.service'
 import { obterLeilao } from '../services/leiloes.service'
+import { obterConexaoOperacao } from '../services/operacao.service'
 
 export type ModalAnimalModo = 'CRIAR' | 'EDITAR'
 export type LayoutInformacoesAnimais = 'AGREGADAS' | 'SEPARADAS'
@@ -103,6 +105,7 @@ function validarLote(lote: string) {
 }
 
 export function useAnimais(leilaoId: string) {
+  const router = useRouter()
   const carregando = ref(true)
   const leilao = ref<Leilao | null>(null)
   const animais = ref<Animal[]>([])
@@ -131,19 +134,41 @@ export function useAnimais(leilaoId: string) {
   const remate360SelectedEventId = ref<number | null>(null)
   const layoutInformacoesModo = ref<LayoutInformacoesAnimais>('AGREGADAS')
   const incluirRacaNasImportacoes = ref(false)
+  let eventSource: EventSource | null = null
+
+  function erroDeConexaoRemota(error: unknown) {
+    const message = (error as Error)?.message ?? ''
+    return (
+      message.includes('fetch failed') ||
+      message.includes('ECONNREFUSED') ||
+      message.includes('Falha na comunicação com o host')
+    )
+  }
 
   async function carregar() {
     carregando.value = true
-    const [leilaoAtual, lista, layout] = await Promise.all([
-      obterLeilao(leilaoId),
-      listarAnimaisPorLeilao(leilaoId),
-      window.config.getLayoutAnimais(leilaoId)
-    ])
-    leilao.value = leilaoAtual
-    animais.value = lista
-    layoutInformacoesModo.value = layout.modo
-    incluirRacaNasImportacoes.value = layout.incluirRacaNasImportacoes
-    carregando.value = false
+    try {
+      const [leilaoAtual, lista, layout] = await Promise.all([
+        obterLeilao(leilaoId),
+        listarAnimaisPorLeilao(leilaoId),
+        window.config.getLayoutAnimais(leilaoId)
+      ])
+      leilao.value = leilaoAtual
+      animais.value = lista
+      layoutInformacoesModo.value = layout.modo
+      incluirRacaNasImportacoes.value = layout.incluirRacaNasImportacoes
+    } catch (error) {
+      if (erroDeConexaoRemota(error)) {
+        router.replace({
+          path: '/conexao',
+          query: { erro: 'nao-foi-possivel-conectar-ao-host' }
+        })
+        return
+      }
+      throw error
+    } finally {
+      carregando.value = false
+    }
   }
 
   const animaisFiltrados = computed(() => {
@@ -398,6 +423,34 @@ export function useAnimais(leilaoId: string) {
   }
 
   onMounted(carregar)
+  onMounted(async () => {
+    try {
+      const conexao = await obterConexaoOperacao()
+      eventSource = new EventSource(
+        `${conexao.baseUrl}/sync/events/${encodeURIComponent(`animais:${leilaoId}`)}`
+      )
+      eventSource.onmessage = () => {
+        void carregar()
+      }
+      eventSource.onerror = () => {
+        router.replace({
+          path: '/conexao',
+          query: { erro: 'nao-foi-possivel-conectar-ao-host' }
+        })
+      }
+    } catch {
+      router.replace({
+        path: '/conexao',
+        query: { erro: 'nao-foi-possivel-conectar-ao-host' }
+      })
+    }
+  })
+  onUnmounted(() => {
+    if (eventSource) {
+      eventSource.close()
+      eventSource = null
+    }
+  })
 
   async function salvarConfiguracaoLayout(
     modo: LayoutInformacoesAnimais,

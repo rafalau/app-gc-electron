@@ -1,4 +1,5 @@
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
+import { useRouter } from 'vue-router'
 import type { Leilao, LeilaoCriarPayload } from '../types/leilao'
 import {
   atualizarLeilao,
@@ -6,6 +7,7 @@ import {
   listarLeiloes,
   removerLeilao
 } from '../services/leiloes.service'
+import { obterConexaoOperacao } from '../services/operacao.service'
 
 export type AbaLeiloes = 'ATIVOS' | 'ARQUIVADOS'
 export type ModalLeilaoModo = 'CRIAR' | 'EDITAR'
@@ -19,6 +21,7 @@ function isArquivado(dataISO: string) {
 }
 
 export function useLeiloes() {
+  const router = useRouter()
   const leiloes = ref<Leilao[]>([])
   const aba = ref<AbaLeiloes>('ATIVOS')
   const busca = ref('')
@@ -27,6 +30,16 @@ export function useLeiloes() {
   const modalModo = ref<ModalLeilaoModo>('CRIAR')
   const editandoId = ref<string | null>(null)
   const erroModal = ref('')
+  let eventSource: EventSource | null = null
+
+  function erroDeConexaoRemota(error: unknown) {
+    const message = (error as Error)?.message ?? ''
+    return (
+      message.includes('fetch failed') ||
+      message.includes('ECONNREFUSED') ||
+      message.includes('Falha na comunicação com o host')
+    )
+  }
 
   const form = ref<LeilaoCriarPayload>({
     titulo_evento: '',
@@ -38,7 +51,18 @@ export function useLeiloes() {
   })
 
   async function carregar() {
-    leiloes.value = await listarLeiloes()
+    try {
+      leiloes.value = await listarLeiloes()
+    } catch (error) {
+      if (erroDeConexaoRemota(error)) {
+        router.replace({
+          path: '/conexao',
+          query: { erro: 'nao-foi-possivel-conectar-ao-host' }
+        })
+        return
+      }
+      throw error
+    }
   }
 
   const leiloesFiltrados = computed(() => {
@@ -139,6 +163,32 @@ export function useLeiloes() {
   }
 
   onMounted(carregar)
+  onMounted(async () => {
+    try {
+      const conexao = await obterConexaoOperacao()
+      eventSource = new EventSource(`${conexao.baseUrl}/sync/events/${encodeURIComponent('leiloes')}`)
+      eventSource.onmessage = () => {
+        void carregar()
+      }
+      eventSource.onerror = () => {
+        router.replace({
+          path: '/conexao',
+          query: { erro: 'nao-foi-possivel-conectar-ao-host' }
+        })
+      }
+    } catch {
+      router.replace({
+        path: '/conexao',
+        query: { erro: 'nao-foi-possivel-conectar-ao-host' }
+      })
+    }
+  })
+  onUnmounted(() => {
+    if (eventSource) {
+      eventSource.close()
+      eventSource = null
+    }
+  })
 
   return {
     leiloes,

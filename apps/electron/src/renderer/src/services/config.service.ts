@@ -1,4 +1,4 @@
-import type { SrtPreviewStatus, VmixConfig, VmixInput } from '../types/config'
+import type { ModoConfig, SrtPreviewStatus, VmixConfig, VmixInput } from '../types/config'
 
 function normalizarInput(input: VmixInput | null): VmixInput | null {
   if (!input) return null
@@ -27,6 +27,14 @@ function normalizarConfig(config: VmixConfig): VmixConfig {
 export async function obterConfiguracaoVmix(): Promise<VmixConfig> {
   const config = await window.config.getVmix()
   return normalizarConfig(config)
+}
+
+export async function obterModoConfig(): Promise<ModoConfig> {
+  return window.config.getModoConfig()
+}
+
+export async function salvarModoConfig(config: ModoConfig): Promise<void> {
+  await window.config.setModo(config)
 }
 
 export async function salvarConfiguracaoVmix(config: VmixConfig): Promise<void> {

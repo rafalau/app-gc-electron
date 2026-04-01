@@ -1,5 +1,6 @@
 import type {
   OperacaoArquivoInfo,
+  OperacaoConexaoInfo,
   OperacaoEstadoPayload,
   OperacaoEstadoPersistido
 } from '../types/operacao'
@@ -10,6 +11,10 @@ export async function obterArquivoOperacao(leilaoId: string): Promise<OperacaoAr
 
 export async function obterEstadoOperacao(leilaoId: string): Promise<OperacaoEstadoPersistido | null> {
   return window.operacao.obterEstado(leilaoId)
+}
+
+export async function obterConexaoOperacao(): Promise<OperacaoConexaoInfo> {
+  return window.operacao.obterConexao()
 }
 
 export async function atualizarArquivoOperacao(

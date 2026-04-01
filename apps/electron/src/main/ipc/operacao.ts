@@ -3,6 +3,24 @@ import { createServer, type Server } from 'http'
 import { networkInterfaces } from 'os'
 import { getPrisma } from '../db/prisma'
 import { getStore } from '../store/store'
+import {
+  atualizarLeilaoLocal,
+  criarLeilaoLocal,
+  listarLeiloesLocal,
+  obterLeilaoLocal,
+  removerLeilaoLocal
+} from './leiloes'
+import {
+  atualizarAnimalLocal,
+  criarAnimalLocal,
+  listarAnimaisPorLeilaoLocal,
+  removerAnimalLocal,
+  removerAnimaisPorLeilaoLocal
+} from './animais'
+import { tbsService } from '../services/tbs.service'
+import { remate360Service } from '../services/remate360.service'
+
+type ModoOperacao = 'HOST' | 'REMOTO' | null
 
 type LeilaoPayload = {
   id: string
@@ -51,6 +69,7 @@ type OperacaoEstadoPayload = {
 
 type OperacaoEstadoPersistido = {
   animalId: string | null
+  lanceDigitado: string
   layoutModo: 'AGREGADAS' | 'SEPARADAS'
   lanceAtual: string
   lanceAtualCentavos: number
@@ -59,8 +78,26 @@ type OperacaoEstadoPersistido = {
   totalDolar: string
 }
 
+type OperacaoConexaoInfo = {
+  modo: ModoOperacao
+  hostIp: string
+  porta: number
+  baseUrl: string
+  ipsDisponiveis: string[]
+}
+
 let operacaoServer: Server | null = null
 let operacaoServerPort = 18452
+const operacaoSseClientes = new Map<string, Set<import('http').ServerResponse>>()
+const syncSseClientes = new Map<string, Set<import('http').ServerResponse>>()
+
+function getAppModeOverride(): ModoOperacao {
+  if (__APP_MODE__ === 'HOST' || __APP_MODE__ === 'REMOTO') {
+    return __APP_MODE__
+  }
+
+  return null
+}
 
 function getLocalIps() {
   const nets = networkInterfaces()
@@ -100,6 +137,178 @@ function buildUrls(leilaoId: string) {
     url_http: `http://${ips.primary}:${operacaoServerPort}${path}`,
     urls_http: ips.all.map((ip) => `http://${ip}:${operacaoServerPort}${path}`)
   }
+}
+
+export async function getModoConexaoOperacao(): Promise<OperacaoConexaoInfo> {
+  const store = await getStore()
+  const modo = getAppModeOverride() ?? store.get('modo')
+  const conexao = store.get('conexaoApp')
+  const ips = getLocalIps()
+  const hostIp =
+    modo === 'HOST'
+      ? ips.primary
+      : String(conexao?.hostIp ?? '').trim() || '127.0.0.1'
+
+  return {
+    modo,
+    hostIp,
+    porta: operacaoServerPort,
+    baseUrl: `http://${hostIp}:${operacaoServerPort}`,
+    ipsDisponiveis: modo === 'HOST' ? ips.all : [hostIp]
+  }
+}
+
+export async function isHostOperacao() {
+  const store = await getStore()
+  return (getAppModeOverride() ?? store.get('modo')) === 'HOST'
+}
+
+function getOperacaoSseClientes(leilaoId: string) {
+  let clientes = operacaoSseClientes.get(leilaoId)
+  if (!clientes) {
+    clientes = new Set()
+    operacaoSseClientes.set(leilaoId, clientes)
+  }
+  return clientes
+}
+
+function getSyncSseClientes(canal: string) {
+  let clientes = syncSseClientes.get(canal)
+  if (!clientes) {
+    clientes = new Set()
+    syncSseClientes.set(canal, clientes)
+  }
+  return clientes
+}
+
+export function publicarSyncEvento(canal: string, payload: unknown = { at: Date.now() }) {
+  const clientes = syncSseClientes.get(canal)
+  if (!clientes || clientes.size === 0) return
+
+  const data = `data: ${JSON.stringify(payload)}\n\n`
+
+  for (const cliente of clientes) {
+    if (!cliente.writableEnded) {
+      cliente.write(data)
+    }
+  }
+}
+
+async function obterLayoutAnimaisLocal(leilaoId: string) {
+  const store = await getStore()
+  const layouts = store.get('layoutAnimaisPorLeilao')
+  return (
+    layouts?.[leilaoId] ?? {
+      modo: 'AGREGADAS',
+      incluirRacaNasImportacoes: false
+    }
+  )
+}
+
+async function salvarLayoutAnimaisLocal(
+  leilaoId: string,
+  layout: { modo: 'AGREGADAS' | 'SEPARADAS'; incluirRacaNasImportacoes: boolean }
+) {
+  const store = await getStore()
+  const layouts = store.get('layoutAnimaisPorLeilao')
+  store.set('layoutAnimaisPorLeilao', {
+    ...layouts,
+    [leilaoId]: layout
+  })
+  return layout
+}
+
+function responderJson(
+  res: import('http').ServerResponse,
+  status: number,
+  body: unknown
+) {
+  res.writeHead(status, {
+    'Content-Type': 'application/json; charset=utf-8',
+    'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+    'Access-Control-Allow-Origin': '*',
+    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Methods': 'GET,POST,OPTIONS'
+  })
+  res.end(JSON.stringify(body))
+}
+
+async function lerCorpoJson(req: import('http').IncomingMessage) {
+  const chunks: Buffer[] = []
+
+  for await (const chunk of req) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
+  }
+
+  const raw = Buffer.concat(chunks).toString('utf-8').trim()
+  return raw ? JSON.parse(raw) : null
+}
+
+function normalizarEstadoPersistido(
+  estado?: Partial<OperacaoEstadoPersistido> | null
+): OperacaoEstadoPersistido {
+  return {
+    animalId: estado?.animalId ?? null,
+    lanceDigitado: String(estado?.lanceDigitado ?? ''),
+    layoutModo: estado?.layoutModo === 'SEPARADAS' ? 'SEPARADAS' : 'AGREGADAS',
+    lanceAtual: String(estado?.lanceAtual ?? '0,00'),
+    lanceAtualCentavos: Number(estado?.lanceAtualCentavos ?? 0) || 0,
+    lanceDolar: String(estado?.lanceDolar ?? '0,00'),
+    totalReal: String(estado?.totalReal ?? '0,00'),
+    totalDolar: String(estado?.totalDolar ?? '0,00')
+  }
+}
+
+async function obterEstadoPersistidoLocal(leilaoId: string): Promise<OperacaoEstadoPersistido | null> {
+  const store = await getStore()
+  const estado = (store.get('operacaoPorLeilao')?.[leilaoId] ?? null) as OperacaoEstadoPersistido | null
+  return estado ? normalizarEstadoPersistido(estado) : null
+}
+
+async function persistirEstadoOperacaoLocal(leilaoId: string, payload: OperacaoEstadoPayload) {
+  const store = await getStore()
+  const operacaoPorLeilao = store.get('operacaoPorLeilao') ?? {}
+
+  const proximoEstado = normalizarEstadoPersistido({
+    animalId: payload.animal?.id ?? null,
+    lanceDigitado: payload.lance_digitado ?? '',
+    layoutModo: payload.layout_modo,
+    lanceAtual: payload.lance_atual ?? '0,00',
+    lanceAtualCentavos: payload.lance_atual_centavos ?? 0,
+    lanceDolar: payload.lance_dolar ?? '0,00',
+    totalReal: payload.total_real ?? '0,00',
+    totalDolar: payload.total_dolar ?? '0,00'
+  })
+
+  store.set('operacaoPorLeilao', {
+    ...operacaoPorLeilao,
+    [leilaoId]: proximoEstado
+  })
+
+  return proximoEstado
+}
+
+function publicarEstadoOperacao(leilaoId: string, estado: OperacaoEstadoPersistido | null) {
+  const clientes = operacaoSseClientes.get(leilaoId)
+  if (!clientes || clientes.size === 0) return
+
+  const payload = `data: ${JSON.stringify(estado)}\n\n`
+
+  for (const cliente of clientes) {
+    if (!cliente.writableEnded) {
+      cliente.write(payload)
+    }
+  }
+}
+
+export async function fetchRemotoJson<T>(url: string, init?: RequestInit): Promise<T> {
+  const response = await fetch(url, init)
+
+  if (!response.ok) {
+    throw new Error(`Falha na comunicação com o host (${response.status}).`)
+  }
+
+  return (await response.json()) as T
 }
 
 function parseInformacoesAgregadas(informacoes: string) {
@@ -158,8 +367,7 @@ function serializarAnimal(animal: any): AnimalPayload | null {
 
 async function montarJsonOperacao(leilaoId: string) {
   const prisma = await getPrisma()
-  const store = await getStore()
-  const estado = store.get('operacaoPorLeilao')?.[leilaoId] ?? null
+  const estado = await obterEstadoPersistidoLocal(leilaoId)
 
   const leilao = await prisma.leilao.findUnique({
     where: { id: leilaoId }
@@ -224,7 +432,11 @@ async function montarJsonOperacao(leilaoId: string) {
   ]
 }
 
-async function ensureOperacaoServer() {
+export async function ensureOperacaoServer() {
+  if (!(await isHostOperacao())) {
+    return { porta: operacaoServerPort }
+  }
+
   if (operacaoServer) {
     return { porta: operacaoServerPort }
   }
@@ -232,25 +444,274 @@ async function ensureOperacaoServer() {
   operacaoServer = createServer(async (req, res) => {
     const url = req.url ?? ''
     const match = url.match(/^\/operacao\/([^/]+)\.json$/)
+    const matchEstado = url.match(/^\/operacao\/estado\/([^/]+)$/)
+    const matchSync = url.match(/^\/operacao\/sync\/([^/]+)$/)
+    const matchEvents = url.match(/^\/operacao\/events\/([^/]+)$/)
+    const matchSyncEvents = url.match(/^\/sync\/events\/(.+)$/)
+    const matchLeiloes = url.match(/^\/sync\/leiloes$/)
+    const matchLeilao = url.match(/^\/sync\/leiloes\/([^/]+)$/)
+    const matchAnimais = url.match(/^\/sync\/animais\/([^/]+)$/)
+    const matchAnimal = url.match(/^\/sync\/animal\/([^/]+)$/)
+    const matchAnimaisLimpar = url.match(/^\/sync\/animais-leilao\/([^/]+)$/)
+    const matchLayout = url.match(/^\/sync\/layout\/([^/]+)$/)
+    const matchTbsLeiloes = url.match(/^\/sync\/tbs\/leiloes$/)
+    const matchTbsImportar = url.match(/^\/sync\/tbs\/importar$/)
+    const matchRemateEventos = url.match(/^\/sync\/remate360\/eventos$/)
+    const matchRemateImportar = url.match(/^\/sync\/remate360\/importar$/)
 
-    if (!match) {
-      res.writeHead(404, { 'Content-Type': 'application/json; charset=utf-8' })
-      res.end(JSON.stringify({ error: 'Not found' }))
+    if (req.method === 'OPTIONS') {
+      res.writeHead(204, {
+        'Access-Control-Allow-Origin': '*',
+        'Access-Control-Allow-Headers': 'Content-Type',
+        'Access-Control-Allow-Methods': 'GET,POST,OPTIONS'
+      })
+      res.end()
       return
     }
 
     try {
-      const leilaoId = decodeURIComponent(match[1] ?? '')
-      const body = await montarJsonOperacao(leilaoId)
+      if (match) {
+        const leilaoId = decodeURIComponent(match[1] ?? '')
+        const body = await montarJsonOperacao(leilaoId)
+        responderJson(res, 200, body)
+        return
+      }
 
-      res.writeHead(200, {
-        'Content-Type': 'application/json; charset=utf-8',
-        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate'
-      })
-      res.end(JSON.stringify(body, null, 2))
+      if (matchEstado && req.method === 'GET') {
+        const leilaoId = decodeURIComponent(matchEstado[1] ?? '')
+        const body = await obterEstadoPersistidoLocal(leilaoId)
+        responderJson(res, 200, body)
+        return
+      }
+
+      if (matchSync && req.method === 'POST') {
+        const leilaoId = decodeURIComponent(matchSync[1] ?? '')
+        const payload = (await lerCorpoJson(req)) as OperacaoEstadoPayload
+        const estado = await persistirEstadoOperacaoLocal(leilaoId, payload)
+        publicarEstadoOperacao(leilaoId, estado)
+        responderJson(res, 200, {
+          estado,
+          arquivo: buildUrls(leilaoId)
+        })
+        return
+      }
+
+      if (matchEvents && req.method === 'GET') {
+        const leilaoId = decodeURIComponent(matchEvents[1] ?? '')
+
+        res.writeHead(200, {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+          Connection: 'keep-alive',
+          'Access-Control-Allow-Origin': '*'
+        })
+
+        const clientes = getOperacaoSseClientes(leilaoId)
+        clientes.add(res)
+
+        const estadoAtual = await obterEstadoPersistidoLocal(leilaoId)
+        res.write(`data: ${JSON.stringify(estadoAtual)}\n\n`)
+
+        const heartbeat = setInterval(() => {
+          if (!res.writableEnded) {
+            res.write(': ping\n\n')
+          }
+        }, 15000)
+
+        req.on('close', () => {
+          clearInterval(heartbeat)
+          clientes.delete(res)
+          if (clientes.size === 0) {
+            operacaoSseClientes.delete(leilaoId)
+          }
+          if (!res.writableEnded) res.end()
+        })
+
+        return
+      }
+
+      if (matchSyncEvents && req.method === 'GET') {
+        const canal = decodeURIComponent(matchSyncEvents[1] ?? '')
+
+        res.writeHead(200, {
+          'Content-Type': 'text/event-stream',
+          'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+          Connection: 'keep-alive',
+          'Access-Control-Allow-Origin': '*'
+        })
+
+        const clientes = getSyncSseClientes(canal)
+        clientes.add(res)
+        res.write(`data: ${JSON.stringify({ ready: true, channel: canal, at: Date.now() })}\n\n`)
+
+        const heartbeat = setInterval(() => {
+          if (!res.writableEnded) {
+            res.write(': ping\n\n')
+          }
+        }, 15000)
+
+        req.on('close', () => {
+          clearInterval(heartbeat)
+          clientes.delete(res)
+          if (clientes.size === 0) {
+            syncSseClientes.delete(canal)
+          }
+          if (!res.writableEnded) res.end()
+        })
+
+        return
+      }
+
+      if (matchLeiloes && req.method === 'GET') {
+        responderJson(res, 200, await listarLeiloesLocal())
+        return
+      }
+
+      if (matchLeiloes && req.method === 'POST') {
+        const payload = await lerCorpoJson(req)
+        const created = await criarLeilaoLocal(payload)
+        publicarSyncEvento('leiloes')
+        responderJson(res, 200, created)
+        return
+      }
+
+      if (matchLeilao && req.method === 'GET') {
+        responderJson(res, 200, await obterLeilaoLocal(decodeURIComponent(matchLeilao[1] ?? '')))
+        return
+      }
+
+      if (matchLeilao && req.method === 'PUT') {
+        const id = decodeURIComponent(matchLeilao[1] ?? '')
+        const payload = await lerCorpoJson(req)
+        const updated = await atualizarLeilaoLocal(id, payload)
+        publicarSyncEvento('leiloes')
+        publicarSyncEvento(`animais:${id}`)
+        responderJson(res, 200, updated)
+        return
+      }
+
+      if (matchLeilao && req.method === 'DELETE') {
+        const id = decodeURIComponent(matchLeilao[1] ?? '')
+        const removed = await removerLeilaoLocal(id)
+        publicarSyncEvento('leiloes')
+        publicarSyncEvento(`animais:${id}`)
+        responderJson(res, 200, removed)
+        return
+      }
+
+      if (matchAnimais && req.method === 'GET') {
+        const leilaoId = decodeURIComponent(matchAnimais[1] ?? '')
+        responderJson(res, 200, await listarAnimaisPorLeilaoLocal(leilaoId))
+        return
+      }
+
+      if (matchAnimais && req.method === 'POST') {
+        const leilaoId = decodeURIComponent(matchAnimais[1] ?? '')
+        const payload = await lerCorpoJson(req)
+        const created = await criarAnimalLocal(payload)
+        publicarSyncEvento('leiloes')
+        publicarSyncEvento(`animais:${leilaoId}`)
+        responderJson(res, 200, created)
+        return
+      }
+
+      if (matchAnimal && req.method === 'PUT') {
+        const id = decodeURIComponent(matchAnimal[1] ?? '')
+        const payload = await lerCorpoJson(req)
+        const updated = await atualizarAnimalLocal(id, payload)
+        publicarSyncEvento('leiloes')
+        publicarSyncEvento(`animais:${updated.leilao_id}`)
+        responderJson(res, 200, updated)
+        return
+      }
+
+      if (matchAnimal && req.method === 'DELETE') {
+        const id = decodeURIComponent(matchAnimal[1] ?? '')
+        const prisma = await getPrisma()
+        const [animal] = await prisma.$queryRawUnsafe<any[]>(
+          `SELECT leilao_id FROM Animal WHERE id = ? LIMIT 1`,
+          id
+        )
+        await removerAnimalLocal(id)
+        publicarSyncEvento('leiloes')
+        if (animal?.leilao_id) {
+          publicarSyncEvento(`animais:${String(animal.leilao_id)}`)
+        }
+        responderJson(res, 200, true)
+        return
+      }
+
+      if (matchAnimaisLimpar && req.method === 'DELETE') {
+        const leilaoId = decodeURIComponent(matchAnimaisLimpar[1] ?? '')
+        await removerAnimaisPorLeilaoLocal(leilaoId)
+        publicarSyncEvento('leiloes')
+        publicarSyncEvento(`animais:${leilaoId}`)
+        responderJson(res, 200, true)
+        return
+      }
+
+      if (matchLayout && req.method === 'GET') {
+        const leilaoId = decodeURIComponent(matchLayout[1] ?? '')
+        responderJson(res, 200, await obterLayoutAnimaisLocal(leilaoId))
+        return
+      }
+
+      if (matchLayout && req.method === 'PUT') {
+        const leilaoId = decodeURIComponent(matchLayout[1] ?? '')
+        const payload = await lerCorpoJson(req)
+        const layout = await salvarLayoutAnimaisLocal(leilaoId, payload)
+        publicarSyncEvento(`animais:${leilaoId}`)
+        responderJson(res, 200, layout)
+        return
+      }
+
+      if (matchTbsLeiloes && req.method === 'GET') {
+        responderJson(res, 200, await tbsService.listActiveAuctions())
+        return
+      }
+
+      if (matchTbsImportar && req.method === 'POST') {
+        const payload = (await lerCorpoJson(req)) as {
+          leilaoId: string
+          auctionId: number
+          incluirRacaNasInformacoes?: boolean
+        }
+        const resumo = await tbsService.importAuction(
+          payload.leilaoId,
+          payload.auctionId,
+          Boolean(payload.incluirRacaNasInformacoes)
+        )
+        publicarSyncEvento('leiloes')
+        publicarSyncEvento(`animais:${payload.leilaoId}`)
+        responderJson(res, 200, resumo)
+        return
+      }
+
+      if (matchRemateEventos && req.method === 'GET') {
+        responderJson(res, 200, await remate360Service.listEvents())
+        return
+      }
+
+      if (matchRemateImportar && req.method === 'POST') {
+        const payload = (await lerCorpoJson(req)) as {
+          leilaoId: string
+          eventId: number
+          incluirRacaNasInformacoes?: boolean
+        }
+        const resumo = await remate360Service.importEvent(
+          payload.leilaoId,
+          payload.eventId,
+          Boolean(payload.incluirRacaNasInformacoes)
+        )
+        publicarSyncEvento('leiloes')
+        publicarSyncEvento(`animais:${payload.leilaoId}`)
+        responderJson(res, 200, resumo)
+        return
+      }
+
+      responderJson(res, 404, { error: 'Not found' })
     } catch (error) {
-      res.writeHead(500, { 'Content-Type': 'application/json; charset=utf-8' })
-      res.end(JSON.stringify({ error: (error as Error).message }))
+      responderJson(res, 500, { error: (error as Error).message })
     }
   })
 
@@ -264,39 +725,67 @@ async function ensureOperacaoServer() {
 }
 
 export function registrarIpcOperacao() {
-  void ensureOperacaoServer()
+  void ensureOperacaoServer().catch(() => {
+    // No modo remoto não há servidor local da operação.
+  })
+
+  ipcMain.handle('operacao:obterConexao', async () => {
+    if (await isHostOperacao()) {
+      await ensureOperacaoServer()
+    }
+    return getModoConexaoOperacao()
+  })
 
   ipcMain.handle('operacao:obterArquivo', async (_evt, leilaoId: string) => {
+    const conexao = await getModoConexaoOperacao()
+
+    if (conexao.modo === 'REMOTO') {
+      return {
+        url_http: `${conexao.baseUrl}/operacao/${encodeURIComponent(leilaoId)}.json`,
+        urls_http: [`${conexao.baseUrl}/operacao/${encodeURIComponent(leilaoId)}.json`]
+      }
+    }
+
     await ensureOperacaoServer()
     return buildUrls(leilaoId)
   })
 
   ipcMain.handle('operacao:obterEstado', async (_evt, leilaoId: string) => {
-    const store = await getStore()
-    const estado = (store.get('operacaoPorLeilao')?.[leilaoId] ?? null) as OperacaoEstadoPersistido | null
-    return estado
+    const conexao = await getModoConexaoOperacao()
+
+    if (conexao.modo === 'REMOTO') {
+      return fetchRemotoJson<OperacaoEstadoPersistido | null>(
+        `${conexao.baseUrl}/operacao/estado/${encodeURIComponent(leilaoId)}`
+      )
+    }
+
+    await ensureOperacaoServer()
+    return obterEstadoPersistidoLocal(leilaoId)
   })
 
   ipcMain.handle(
     'operacao:atualizarArquivo',
     async (_evt, leilaoId: string, payload: OperacaoEstadoPayload) => {
+      const conexao = await getModoConexaoOperacao()
+
+      if (conexao.modo === 'REMOTO') {
+        const response = await fetchRemotoJson<{ estado: OperacaoEstadoPersistido | null; arquivo: ReturnType<typeof buildUrls> }>(
+          `${conexao.baseUrl}/operacao/sync/${encodeURIComponent(leilaoId)}`,
+          {
+            method: 'POST',
+            headers: {
+              'Content-Type': 'application/json'
+            },
+            body: JSON.stringify(payload)
+          }
+        )
+
+        return response.arquivo
+      }
+
       await ensureOperacaoServer()
-      const store = await getStore()
-      const operacaoPorLeilao = store.get('operacaoPorLeilao') ?? {}
-
-      store.set('operacaoPorLeilao', {
-        ...operacaoPorLeilao,
-        [leilaoId]: {
-          animalId: payload.animal?.id ?? null,
-          layoutModo: payload.layout_modo,
-          lanceAtual: payload.lance_atual ?? '0,00',
-          lanceAtualCentavos: payload.lance_atual_centavos ?? 0,
-          lanceDolar: payload.lance_dolar ?? '0,00',
-          totalReal: payload.total_real ?? '0,00',
-          totalDolar: payload.total_dolar ?? '0,00'
-        }
-      })
-
+      const estado = await persistirEstadoOperacaoLocal(leilaoId, payload)
+      publicarEstadoOperacao(leilaoId, estado)
       return buildUrls(leilaoId)
     }
   )

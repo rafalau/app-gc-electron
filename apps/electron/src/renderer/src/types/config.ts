@@ -24,3 +24,9 @@ export type SrtPreviewStatus = {
   endpoint: string | null
   erro: string | null
 }
+
+export type ModoConfig = {
+  modo: 'HOST' | 'REMOTO' | null
+  hostIp: string
+  portaApp: number
+}

@@ -6,6 +6,12 @@ import {
 } from 'node:http'
 import { spawn, type ChildProcess } from 'node:child_process'
 import { getStore } from '../store/store'
+import {
+  ensureOperacaoServer,
+  fetchRemotoJson,
+  getModoConexaoOperacao,
+  publicarSyncEvento
+} from './operacao'
 
 type VmixConfigIpc = {
   ativo: boolean
@@ -21,6 +27,20 @@ type VmixConfigIpc = {
     ativo: boolean
     porta: number | null
   }
+}
+
+type ModoConfigIpc = {
+  modo: 'HOST' | 'REMOTO' | null
+  hostIp: string
+  portaApp: number
+}
+
+function getAppModeOverride(): 'HOST' | 'REMOTO' | null {
+  if (__APP_MODE__ === 'HOST' || __APP_MODE__ === 'REMOTO') {
+    return __APP_MODE__
+  }
+
+  return null
 }
 
 function normalizarConfigVmix(vmix?: Partial<VmixConfigIpc> | null): VmixConfigIpc {
@@ -41,6 +61,49 @@ function normalizarConfigVmix(vmix?: Partial<VmixConfigIpc> | null): VmixConfigI
       porta: vmix?.srt?.porta ? Number(vmix.srt.porta) : null
     }
   }
+}
+
+function normalizarModoConfig(
+  config?: Partial<ModoConfigIpc> | null,
+  fallback?: Partial<ModoConfigIpc> | null
+): ModoConfigIpc {
+  const portaBase = Number(config?.portaApp ?? fallback?.portaApp ?? 18452)
+
+  return {
+    modo: config?.modo ?? fallback?.modo ?? null,
+    hostIp: String(config?.hostIp ?? fallback?.hostIp ?? '').trim(),
+    portaApp: Number.isInteger(portaBase) && portaBase > 0 ? portaBase : 18452
+  }
+}
+
+function aplicarDefaultsDeModo(
+  modoConfig: ModoConfigIpc,
+  vmix: VmixConfigIpc
+): { modoConfig: ModoConfigIpc; vmix: VmixConfigIpc } {
+  if (modoConfig.modo === 'HOST') {
+    return {
+      modoConfig: {
+        ...modoConfig,
+        hostIp: '127.0.0.1'
+      },
+      vmix: {
+        ...vmix,
+        ip: '127.0.0.1'
+      }
+    }
+  }
+
+  if (modoConfig.modo === 'REMOTO') {
+    return {
+      modoConfig,
+      vmix: {
+        ...vmix,
+        ip: modoConfig.hostIp
+      }
+    }
+  }
+
+  return { modoConfig, vmix }
 }
 
 function extrairAtributosXml(bloco: string) {
@@ -466,24 +529,79 @@ async function acionarOverlayVmix(config: Partial<VmixConfigIpc>) {
 }
 
 export function registrarIpcConfig() {
-  ipcMain.handle('config:setModo', async (_, modo: 'HOST' | 'REMOTO' | null) => {
+  ipcMain.handle('config:setModo', async (_, config: Partial<ModoConfigIpc> | null) => {
     const store = await getStore()
-    store.set('modo', modo)
+    const modoFixo = getAppModeOverride()
+    const modoAtual = store.get('modo')
+    const conexaoAtual = store.get('conexaoApp')
+    const vmixAtual = normalizarConfigVmix(store.get('vmix'))
+    const modoConfig = normalizarModoConfig(config, {
+      modo: modoFixo ?? modoAtual,
+      hostIp: conexaoAtual.hostIp,
+      portaApp: conexaoAtual.porta
+    })
+    modoConfig.modo = modoFixo ?? modoConfig.modo
+    const aplicado = aplicarDefaultsDeModo(modoConfig, vmixAtual)
+
+    store.set('modo', aplicado.modoConfig.modo)
+    store.set('conexaoApp', {
+      hostIp: aplicado.modoConfig.hostIp,
+      porta: aplicado.modoConfig.portaApp
+    })
+    store.set('vmix', aplicado.vmix)
   })
 
   ipcMain.handle('config:getModo', async () => {
+    const modoFixo = getAppModeOverride()
+    if (modoFixo) return modoFixo
     const store = await getStore()
     return store.get('modo')
   })
 
+  ipcMain.handle('config:getModoConfig', async () => {
+    const store = await getStore()
+    const modoFixo = getAppModeOverride()
+    const modo = store.get('modo')
+    const conexao = store.get('conexaoApp')
+
+    return normalizarModoConfig({
+      modo: modoFixo ?? modo,
+      hostIp: conexao.hostIp,
+      portaApp: conexao.porta
+    })
+  })
+
   ipcMain.handle('config:getVmix', async () => {
     const store = await getStore()
-    return store.get('vmix')
+    const modoFixo = getAppModeOverride()
+    const modo = store.get('modo')
+    const conexao = store.get('conexaoApp')
+    const vmix = normalizarConfigVmix(store.get('vmix'))
+
+    return aplicarDefaultsDeModo(
+      normalizarModoConfig({
+        modo: modoFixo ?? modo,
+        hostIp: conexao.hostIp,
+        portaApp: conexao.porta
+      }),
+      vmix
+    ).vmix
   })
 
   ipcMain.handle('config:setVmix', async (_evt, vmix: Partial<VmixConfigIpc>) => {
     const store = await getStore()
-    store.set('vmix', normalizarConfigVmix(vmix))
+    const modoFixo = getAppModeOverride()
+    const modo = store.get('modo')
+    const conexao = store.get('conexaoApp')
+    const aplicado = aplicarDefaultsDeModo(
+      normalizarModoConfig({
+        modo: modoFixo ?? modo,
+        hostIp: conexao.hostIp,
+        portaApp: conexao.porta
+      }),
+      normalizarConfigVmix(vmix)
+    )
+    store.set('vmix', aplicado.vmix)
   })
 
   ipcMain.handle('config:listarInputsVmix', async (_evt, vmix: Partial<VmixConfigIpc>) => {
@@ -517,6 +635,12 @@ export function registrarIpcConfig() {
   })
 
   ipcMain.handle('config:getLayoutAnimais', async (_evt, leilaoId: string) => {
+    const conexao = await getModoConexaoOperacao()
+    if (conexao.modo === 'REMOTO') {
+      return fetchRemotoJson(`${conexao.baseUrl}/sync/layout/${encodeURIComponent(leilaoId)}`)
+    }
+
+    await ensureOperacaoServer()
     const store = await getStore()
     const layouts = store.get('layoutAnimaisPorLeilao')
     return (
@@ -534,12 +658,26 @@ export function registrarIpcConfig() {
       leilaoId: string,
       layout: { modo: 'AGREGADAS' | 'SEPARADAS'; incluirRacaNasImportacoes: boolean }
     ) => {
+      const conexao = await getModoConexaoOperacao()
+      if (conexao.modo === 'REMOTO') {
+        await fetchRemotoJson(`${conexao.baseUrl}/sync/layout/${encodeURIComponent(leilaoId)}`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(layout)
+        })
+        return
+      }
+
+      await ensureOperacaoServer()
       const store = await getStore()
       const layouts = store.get('layoutAnimaisPorLeilao')
       store.set('layoutAnimaisPorLeilao', {
         ...layouts,
         [leilaoId]: layout
       })
+      publicarSyncEvento(`animais:${leilaoId}`)
     }
   )
 }

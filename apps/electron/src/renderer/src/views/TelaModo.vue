@@ -1,23 +1,42 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
+import { obterModoConfig, salvarModoConfig } from '@renderer/services/config.service'
 
 type Modo = 'HOST' | 'REMOTO'
 
 const router = useRouter()
 const modo = ref<Modo | null>(null)
+const ipRemoto = ref('')
+const erro = ref('')
 
 const selecionar = (m: Modo) => {
   modo.value = m
+  erro.value = ''
 }
 
 const continuar = async () => {
   if (!modo.value) return
 
-  await window.config.setModo(modo.value)
+  if (modo.value === 'REMOTO' && !ipRemoto.value.trim()) {
+    erro.value = 'Informe o IP do HOST para continuar.'
+    return
+  }
+
+  await salvarModoConfig({
+    modo: modo.value,
+    hostIp: modo.value === 'HOST' ? '127.0.0.1' : ipRemoto.value.trim(),
+    portaApp: 18452
+  })
 
   router.replace('/inicio')
 }
+
+onMounted(async () => {
+  const config = await obterModoConfig()
+  modo.value = config.modo
+  ipRemoto.value = config.modo === 'REMOTO' ? config.hostIp : ''
+})
 </script>
 
 <template>
@@ -148,6 +167,25 @@ const continuar = async () => {
                   </li>
                 </ul>
               </button>
+            </div>
+
+            <div v-if="modo === 'REMOTO'" class="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-5">
+              <label class="block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+                IP do Host
+              </label>
+              <input
+                v-model="ipRemoto"
+                class="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 shadow-sm outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+                type="text"
+                placeholder="Ex.: 172.30.38.22"
+              />
+              <div class="mt-2 text-xs text-slate-500">
+                Esse IP será usado para conectar no APP host, no vMix e no SRT.
+              </div>
+            </div>
+
+            <div v-if="erro" class="mt-4 rounded-xl border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {{ erro }}
             </div>
           </div>
 

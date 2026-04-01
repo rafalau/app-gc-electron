@@ -75,6 +75,20 @@ type OperacaoEstadoPayload = {
   atualizado_em: string
 }
 
+type ModoConfigPayload = {
+  modo: 'HOST' | 'REMOTO' | null
+  hostIp: string
+  portaApp: number
+}
+
+type OperacaoConexaoPayload = {
+  modo: 'HOST' | 'REMOTO' | null
+  hostIp: string
+  porta: number
+  baseUrl: string
+  ipsDisponiveis: string[]
+}
+
 // Custom APIs for renderer
 const api = {}
 
@@ -84,8 +98,9 @@ if (process.contextIsolated) {
     contextBridge.exposeInMainWorld('api', api)
 
     contextBridge.exposeInMainWorld('config', {
-      setModo: (modo: 'HOST' | 'REMOTO' | null) => ipcRenderer.invoke('config:setModo', modo),
+      setModo: (config: ModoConfigPayload) => ipcRenderer.invoke('config:setModo', config),
       getModo: () => ipcRenderer.invoke('config:getModo'),
+      getModoConfig: () => ipcRenderer.invoke('config:getModoConfig'),
       getVmix: () => ipcRenderer.invoke('config:getVmix'),
       setVmix: (vmix: {
         ativo: boolean
@@ -179,6 +194,7 @@ if (process.contextIsolated) {
     contextBridge.exposeInMainWorld('operacao', {
       obterArquivo: (leilaoId: string) => ipcRenderer.invoke('operacao:obterArquivo', leilaoId),
       obterEstado: (leilaoId: string) => ipcRenderer.invoke('operacao:obterEstado', leilaoId),
+      obterConexao: (): Promise<OperacaoConexaoPayload> => ipcRenderer.invoke('operacao:obterConexao'),
       atualizarArquivo: (leilaoId: string, payload: OperacaoEstadoPayload) =>
         ipcRenderer.invoke('operacao:atualizarArquivo', leilaoId, payload)
     })

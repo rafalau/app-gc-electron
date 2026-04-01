@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
 import BaseButton from '@renderer/components/ui/BaseButton.vue'
 import BaseDropdown from '@renderer/components/ui/BaseDropdown.vue'
@@ -11,6 +11,7 @@ import TbsImportModal from '@renderer/components/animal/TbsImportModal.vue'
 import Remate360ImportModal from '@renderer/components/animal/Remate360ImportModal.vue'
 import ImportSummaryModal from '@renderer/components/animal/ImportSummaryModal.vue'
 import { useAnimais } from '@renderer/composables/useAnimais'
+import { obterModoConfig } from '@renderer/services/config.service'
 import type { Animal } from '@renderer/types/animal'
 import { applyUppercaseInput } from '@renderer/utils/uppercaseInput'
 
@@ -78,29 +79,39 @@ const configuracoesAbertas = ref(false)
 const confirmacaoLimpar = ref('')
 const layoutModoDraft = ref<'AGREGADAS' | 'SEPARADAS'>('AGREGADAS')
 const incluirRacaDraft = ref(false)
-const importItems = computed(() => [
-  {
-    label: 'Importar Excel',
-    icon: 'fa-file-excel',
-    action: () => {
-      void importarPlanilhaExcel()
-    }
-  },
-  {
-    label: 'Importar TBS',
-    icon: 'fa-cloud-download-alt',
-    action: () => {
-      void abrirImportacaoTbs()
-    }
-  },
-  {
-    label: 'Importar do Remate360',
-    icon: 'fa-cloud-download-alt',
-    action: () => {
-      void abrirImportacaoRemate360()
-    }
+const modoAtual = ref<'HOST' | 'REMOTO' | null>(null)
+const importItems = computed(() => {
+  const items: DropdownItem[] = []
+
+  if (modoAtual.value !== 'REMOTO') {
+    items.push({
+      label: 'Importar Excel',
+      icon: 'fa-file-excel',
+      action: () => {
+        void importarPlanilhaExcel()
+      }
+    })
   }
-])
+
+  items.push(
+    {
+      label: 'Importar TBS',
+      icon: 'fa-cloud-download-alt',
+      action: () => {
+        void abrirImportacaoTbs()
+      }
+    },
+    {
+      label: 'Importar do Remate360',
+      icon: 'fa-cloud-download-alt',
+      action: () => {
+        void abrirImportacaoRemate360()
+      }
+    }
+  )
+
+  return items
+})
 const gerenciarItems = computed(() => {
   const items: DropdownItem[] = [
     {
@@ -198,6 +209,11 @@ function abrirModoOperacao(animal?: Animal) {
     query: animal ? { animalId: animal.id } : {}
   })
 }
+
+onMounted(async () => {
+  const modoConfig = await obterModoConfig()
+  modoAtual.value = modoConfig.modo
+})
 </script>
 
 <template>
