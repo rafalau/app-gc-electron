@@ -1,4 +1,4 @@
-import type { VmixConfig, VmixInput } from '../types/config'
+import type { SrtPreviewStatus, VmixConfig, VmixInput } from '../types/config'
 
 function normalizarInput(input: VmixInput | null): VmixInput | null {
   if (!input) return null
@@ -16,7 +16,11 @@ function normalizarConfig(config: VmixConfig): VmixConfig {
     ativo: Boolean(config.ativo),
     ip: String(config.ip ?? '').trim(),
     porta: Number(config.porta) || 8088,
-    inputSelecionado: normalizarInput(config.inputSelecionado)
+    inputSelecionado: normalizarInput(config.inputSelecionado),
+    srt: {
+      ativo: Boolean(config.srt?.ativo),
+      porta: config.srt?.porta ? Number(config.srt.porta) : null
+    }
   }
 }
 
@@ -35,4 +39,24 @@ export async function listarInputsVmix(config: VmixConfig): Promise<VmixInput[]>
 
 export async function acionarOverlayVmix(config: VmixConfig): Promise<{ ok: boolean }> {
   return window.config.acionarOverlayVmix(normalizarConfig(config))
+}
+
+export async function iniciarPreviewSrt(config: VmixConfig): Promise<SrtPreviewStatus> {
+  return window.config.iniciarPreviewSrt(normalizarConfig(config))
+}
+
+export async function pararPreviewSrt(): Promise<SrtPreviewStatus> {
+  return window.config.pararPreviewSrt()
+}
+
+export async function obterStatusPreviewSrt(): Promise<SrtPreviewStatus> {
+  return window.config.getStatusPreviewSrt()
+}
+
+export async function abrirMonitorSrtExterno(config: VmixConfig): Promise<{ ok: boolean }> {
+  return window.config.abrirMonitorSrtExterno(normalizarConfig(config))
+}
+
+export async function pararMonitorSrtExterno(): Promise<{ ok: boolean }> {
+  return window.config.pararMonitorSrtExterno()
 }

@@ -11,6 +11,7 @@ import { registrarIpcRemate360 } from './ipc/remate360'
 import { registrarIpcStudbook } from './ipc/studbook'
 import { registrarIpcOperacao } from './ipc/operacao'
 import { registrarIpcJanela } from './ipc/janela'
+import { registrarIpcSrtPlayer } from './ipc/srtPlayer'
 import { migrateDeploy } from './db/migrate'
 
 if (process.platform === 'linux') {
@@ -73,6 +74,7 @@ app
     registrarIpcStudbook()
     registrarIpcOperacao()
     registrarIpcJanela()
+    registrarIpcSrtPlayer()
 
     createWindow()
 

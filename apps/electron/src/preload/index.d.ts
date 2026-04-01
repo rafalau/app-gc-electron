@@ -105,6 +105,7 @@ export type VmixConfig = {
   ip: string
   porta: number
   inputSelecionado: VmixInput | null
+  srt: SrtConfig
 }
 
 export type VmixInput = {
@@ -112,6 +113,18 @@ export type VmixInput = {
   title: string
   type: string
   key: string
+}
+
+export type SrtConfig = {
+  ativo: boolean
+  porta: number | null
+}
+
+export type SrtPreviewStatus = {
+  ativo: boolean
+  url: string | null
+  endpoint: string | null
+  erro: string | null
 }
 
 export type OperacaoEstadoPayload = {
@@ -151,6 +164,11 @@ declare global {
       setVmix: (vmix: VmixConfig) => Promise<void>
       listarInputsVmix: (vmix: VmixConfig) => Promise<VmixInput[]>
       acionarOverlayVmix: (vmix: VmixConfig) => Promise<{ ok: boolean }>
+      iniciarPreviewSrt: (vmix: VmixConfig) => Promise<SrtPreviewStatus>
+      pararPreviewSrt: () => Promise<SrtPreviewStatus>
+      getStatusPreviewSrt: () => Promise<SrtPreviewStatus>
+      abrirMonitorSrtExterno: (vmix: VmixConfig) => Promise<{ ok: boolean }>
+      pararMonitorSrtExterno: () => Promise<{ ok: boolean }>
       getLayoutAnimais: (leilaoId: string) => Promise<LayoutAnimaisConfig>
       setLayoutAnimais: (leilaoId: string, layout: LayoutAnimaisConfig) => Promise<void>
     }
@@ -201,6 +219,14 @@ declare global {
     }
     janela: {
       definirPreset: (preset: 'DESKTOP' | 'OPERACAO') => Promise<void>
+    }
+    srtPlayer: {
+      prepare: () => Promise<{ ok: boolean }>
+      setBounds: (bounds: { x: number; y: number; width: number; height: number }) => Promise<{ ok: boolean }>
+      setVisible: (visible: boolean) => Promise<{ ok: boolean }>
+      start: (payload: { url: string; muted?: boolean; volume?: number }) => Promise<{ ok: boolean }>
+      stop: () => Promise<{ ok: boolean }>
+      shutdown: () => Promise<{ ok: boolean }>
     }
   }
 }

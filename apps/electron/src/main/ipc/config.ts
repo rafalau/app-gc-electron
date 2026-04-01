@@ -1,4 +1,10 @@
 import { ipcMain } from 'electron'
+import {
+  createServer as createHttpServer,
+  type Server as HttpServer,
+  type ServerResponse
+} from 'node:http'
+import { spawn, type ChildProcess } from 'node:child_process'
 import { getStore } from '../store/store'
 
 type VmixConfigIpc = {
@@ -11,6 +17,10 @@ type VmixConfigIpc = {
     title: string
     type: string
   } | null
+  srt: {
+    ativo: boolean
+    porta: number | null
+  }
 }
 
 function normalizarConfigVmix(vmix?: Partial<VmixConfigIpc> | null): VmixConfigIpc {
@@ -25,7 +35,11 @@ function normalizarConfigVmix(vmix?: Partial<VmixConfigIpc> | null): VmixConfigI
           title: String(vmix.inputSelecionado.title ?? '').trim(),
           type: String(vmix.inputSelecionado.type ?? '').trim()
         }
-      : null
+      : null,
+    srt: {
+      ativo: Boolean(vmix?.srt?.ativo),
+      porta: vmix?.srt?.porta ? Number(vmix.srt.porta) : null
+    }
   }
 }
 
@@ -37,6 +51,350 @@ function extrairAtributosXml(bloco: string) {
   }
 
   return atributos
+}
+
+function mensagemFfmpegIgnoravel(mensagem: string) {
+  const texto = mensagem.toLowerCase()
+
+  return (
+    texto.includes('decode_slice_header error') ||
+    texto.includes('no frame!') ||
+    texto.startsWith('last message repeated') ||
+    texto.includes('non-existing pps') ||
+    texto.includes('non-existing sps') ||
+    texto.includes('error while decoding') ||
+    texto.includes('concealing') ||
+    texto.includes('missing reference picture')
+  )
+}
+
+type SrtPreviewStatus = {
+  ativo: boolean
+  url: string | null
+  endpoint: string | null
+  erro: string | null
+}
+
+let srtPreviewProcess: ChildProcess | null = null
+let srtMonitorProcess: ChildProcess | null = null
+let srtPreviewStatus: SrtPreviewStatus = {
+  ativo: false,
+  url: null,
+  endpoint: null,
+  erro: null
+}
+let srtPreviewConfigKey: string | null = null
+let srtPreviewHttpServer: HttpServer | null = null
+let srtPreviewHttpPort: number | null = null
+let srtPreviewFrameAtual: Buffer | null = null
+const srtPreviewClientes = new Set<ServerResponse>()
+
+function montarEndpointSrt(vmix: VmixConfigIpc) {
+  return `srt://${vmix.ip}:${vmix.srt.porta}?timeout=5000000`
+}
+
+async function aguardarInicializacaoPreview(processo: ChildProcess, timeoutMs = 5000): Promise<void> {
+  const startedAt = Date.now()
+
+  while (Date.now() - startedAt < timeoutMs) {
+    if (processo.exitCode !== null) {
+      throw new Error('O processo de preview SRT foi finalizado antes de iniciar.')
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, 150))
+  }
+}
+
+async function garantirServidorPreviewHttp(): Promise<number> {
+  if (srtPreviewHttpServer && srtPreviewHttpPort) {
+    return srtPreviewHttpPort
+  }
+
+  srtPreviewHttpServer = createHttpServer((req, res) => {
+    if (req.url?.startsWith('/preview.mjpg')) {
+      res.writeHead(200, {
+        'Content-Type': 'multipart/x-mixed-replace; boundary=frame',
+        'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
+        Pragma: 'no-cache',
+        Connection: 'keep-alive'
+      })
+
+      srtPreviewClientes.add(res)
+
+      if (srtPreviewFrameAtual) {
+        res.write(
+          `--frame\r\nContent-Type: image/jpeg\r\nContent-Length: ${srtPreviewFrameAtual.length}\r\n\r\n`
+        )
+        res.write(srtPreviewFrameAtual)
+        res.write('\r\n')
+      }
+
+      req.on('close', () => {
+        srtPreviewClientes.delete(res)
+        if (!res.writableEnded) res.end()
+      })
+
+      return
+    }
+
+    if (!req.url?.startsWith('/preview.jpg')) {
+      res.statusCode = 404
+      res.end('Not Found')
+      return
+    }
+
+    if (!srtPreviewFrameAtual) {
+      res.statusCode = 503
+      res.end('Preview indisponivel')
+      return
+    }
+
+    res.statusCode = 200
+    res.setHeader('Content-Type', 'image/jpeg')
+    res.setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, proxy-revalidate')
+    res.end(srtPreviewFrameAtual)
+  })
+
+  const porta = await new Promise<number>((resolve, reject) => {
+    srtPreviewHttpServer!.once('error', reject)
+    srtPreviewHttpServer!.listen(0, '127.0.0.1', () => {
+      const address = srtPreviewHttpServer!.address()
+
+      if (!address || typeof address === 'string') {
+        reject(new Error('Não foi possível iniciar o servidor HTTP do preview SRT.'))
+        return
+      }
+
+      resolve(address.port)
+    })
+  })
+
+  srtPreviewHttpPort = porta
+  return porta
+}
+
+function pararPreviewSrt() {
+  if (srtPreviewProcess && !srtPreviewProcess.killed) {
+    srtPreviewProcess.kill('SIGTERM')
+  }
+
+  srtPreviewFrameAtual = null
+  for (const cliente of srtPreviewClientes) {
+    if (!cliente.writableEnded) cliente.end()
+  }
+  srtPreviewClientes.clear()
+  srtPreviewProcess = null
+  srtPreviewConfigKey = null
+  srtPreviewStatus = {
+    ativo: false,
+    url: null,
+    endpoint: null,
+    erro: null
+  }
+}
+
+function pararMonitorSrtExterno() {
+  if (srtMonitorProcess && !srtMonitorProcess.killed) {
+    srtMonitorProcess.kill('SIGTERM')
+  }
+
+  srtMonitorProcess = null
+}
+
+async function abrirMonitorSrtExterno(config: Partial<VmixConfigIpc>) {
+  const vmix = normalizarConfigVmix(config)
+
+  if (!vmix.srt.ativo) {
+    throw new Error('O recurso SRT está desativado.')
+  }
+
+  if (!vmix.ip) {
+    throw new Error('Informe o IP para o monitor SRT.')
+  }
+
+  if (!vmix.srt.porta || vmix.srt.porta <= 0 || vmix.srt.porta > 65535) {
+    throw new Error('Informe uma porta SRT válida.')
+  }
+
+  pararMonitorSrtExterno()
+
+  const endpoint = montarEndpointSrt(vmix)
+  const args = [
+    '--no-video-title-show',
+    '--network-caching=300',
+    '--live-caching=300',
+    endpoint
+  ]
+
+  const processo = spawn('vlc', args, {
+    detached: true,
+    stdio: 'ignore'
+  })
+
+  processo.unref()
+  srtMonitorProcess = processo
+
+  processo.once('error', () => {
+    srtMonitorProcess = null
+  })
+
+  processo.once('exit', () => {
+    srtMonitorProcess = null
+  })
+
+  return { ok: true }
+}
+
+async function iniciarPreviewSrt(config: Partial<VmixConfigIpc>) {
+  const vmix = normalizarConfigVmix(config)
+
+  if (!vmix.srt.ativo) {
+    throw new Error('O recurso SRT está desativado.')
+  }
+
+  if (!vmix.ip) {
+    throw new Error('Informe o IP para o preview SRT.')
+  }
+
+  if (!vmix.srt.porta || vmix.srt.porta <= 0 || vmix.srt.porta > 65535) {
+    throw new Error('Informe uma porta SRT válida.')
+  }
+
+  const endpoint = montarEndpointSrt(vmix)
+  const configKey = `${endpoint}`
+
+  if (srtPreviewProcess && srtPreviewConfigKey === configKey && srtPreviewStatus.url) {
+    return srtPreviewStatus
+  }
+
+  pararPreviewSrt()
+
+  const portaHttp = await garantirServidorPreviewHttp()
+  const url = `http://127.0.0.1:${portaHttp}/preview.mjpg`
+
+  const args = [
+    '-hide_banner',
+    '-loglevel',
+    'error',
+    '-fflags',
+    '+discardcorrupt+genpts',
+    '-err_detect',
+    'ignore_err',
+    '-analyzeduration',
+    '2M',
+    '-probesize',
+    '2M',
+    '-y',
+    '-i',
+    endpoint,
+    '-an',
+    '-vf',
+    'fps=15,scale=1280:720:force_original_aspect_ratio=decrease,pad=1280:720:(ow-iw)/2:(oh-ih)/2:black',
+    '-q:v',
+    '5',
+    '-f',
+    'image2pipe',
+    '-vcodec',
+    'mjpeg',
+    'pipe:1'
+  ]
+
+  const ffmpeg = spawn('ffmpeg', args, {
+    stdio: ['ignore', 'pipe', 'pipe']
+  })
+
+  srtPreviewProcess = ffmpeg
+  srtPreviewConfigKey = configKey
+  srtPreviewStatus = {
+    ativo: true,
+    url,
+    endpoint,
+    erro: null
+  }
+
+  let bufferAcumulado = Buffer.alloc(0)
+
+  ffmpeg.stdout?.on('data', (chunk: Buffer) => {
+    bufferAcumulado = Buffer.concat([bufferAcumulado, chunk])
+
+    while (true) {
+      const inicio = bufferAcumulado.indexOf(Buffer.from([0xff, 0xd8]))
+      if (inicio < 0) {
+        bufferAcumulado = Buffer.alloc(0)
+        return
+      }
+
+      const fim = bufferAcumulado.indexOf(Buffer.from([0xff, 0xd9]), inicio + 2)
+      if (fim < 0) {
+        if (inicio > 0) bufferAcumulado = bufferAcumulado.subarray(inicio)
+        return
+      }
+
+      const frame = bufferAcumulado.subarray(inicio, fim + 2)
+      bufferAcumulado = bufferAcumulado.subarray(fim + 2)
+      srtPreviewFrameAtual = frame
+
+      for (const cliente of srtPreviewClientes) {
+        if (cliente.writableEnded || cliente.destroyed) {
+          srtPreviewClientes.delete(cliente)
+          continue
+        }
+
+        cliente.write(`--frame\r\nContent-Type: image/jpeg\r\nContent-Length: ${frame.length}\r\n\r\n`)
+        cliente.write(frame)
+        cliente.write('\r\n')
+      }
+    }
+  })
+
+  ffmpeg.stderr.on('data', (chunk) => {
+    const mensagens = String(chunk ?? '')
+      .split('\n')
+      .map((linha) => linha.trim())
+      .filter(Boolean)
+
+    const mensagemFatal = mensagens.find((mensagem) => !mensagemFfmpegIgnoravel(mensagem))
+
+    if (mensagemFatal) {
+      srtPreviewStatus.erro = mensagemFatal
+    }
+  })
+
+  ffmpeg.once('error', (error) => {
+    srtPreviewStatus.erro = error.message
+    srtPreviewStatus.ativo = false
+  })
+
+  ffmpeg.once('exit', (code, signal) => {
+    const erroAtual = srtPreviewStatus.erro
+    srtPreviewFrameAtual = null
+    for (const cliente of srtPreviewClientes) {
+      if (!cliente.writableEnded) cliente.end()
+    }
+    srtPreviewClientes.clear()
+    srtPreviewProcess = null
+    srtPreviewConfigKey = null
+    srtPreviewStatus = {
+      ativo: false,
+      url: null,
+      endpoint,
+      erro:
+        erroAtual ??
+        (code === 0 || signal === 'SIGTERM'
+          ? null
+          : `Preview SRT finalizado inesperadamente (${signal ?? code ?? 'sem código'}).`)
+    }
+  })
+
+  try {
+    await aguardarInicializacaoPreview(ffmpeg)
+  } catch (error) {
+    const erroAtual = srtPreviewStatus.erro
+    pararPreviewSrt()
+    throw new Error(erroAtual || (error as Error).message)
+  }
+
+  return srtPreviewStatus
 }
 
 async function listarInputsVmix(config: Partial<VmixConfigIpc>) {
@@ -134,6 +492,28 @@ export function registrarIpcConfig() {
 
   ipcMain.handle('config:acionarOverlayVmix', async (_evt, vmix: Partial<VmixConfigIpc>) => {
     return acionarOverlayVmix(vmix)
+  })
+
+  ipcMain.handle('config:iniciarPreviewSrt', async (_evt, vmix: Partial<VmixConfigIpc>) => {
+    return iniciarPreviewSrt(vmix)
+  })
+
+  ipcMain.handle('config:pararPreviewSrt', async () => {
+    pararPreviewSrt()
+    return srtPreviewStatus
+  })
+
+  ipcMain.handle('config:getStatusPreviewSrt', async () => {
+    return srtPreviewStatus
+  })
+
+  ipcMain.handle('config:abrirMonitorSrtExterno', async (_evt, vmix: Partial<VmixConfigIpc>) => {
+    return abrirMonitorSrtExterno(vmix)
+  })
+
+  ipcMain.handle('config:pararMonitorSrtExterno', async () => {
+    pararMonitorSrtExterno()
+    return { ok: true }
   })
 
   ipcMain.handle('config:getLayoutAnimais', async (_evt, leilaoId: string) => {

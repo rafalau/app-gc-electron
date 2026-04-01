@@ -10,6 +10,10 @@ type StoreSchema = {
       title: string
       type: string
     } | null
+    srt: {
+      ativo: boolean
+      porta: number | null
+    }
   }
   layoutAnimaisPorLeilao: Record<
     string,
@@ -53,7 +57,11 @@ export async function getStore() {
         ativo: false,
         ip: '',
         porta: 8088,
-        inputSelecionado: null
+        inputSelecionado: null,
+        srt: {
+          ativo: false,
+          porta: null
+        }
       },
       layoutAnimaisPorLeilao: {},
       operacaoPorLeilao: {}
