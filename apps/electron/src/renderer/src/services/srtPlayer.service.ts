@@ -15,6 +15,10 @@ export async function definirVisibilidadeSrtPlayer(visible: boolean) {
   return window.srtPlayer.setVisible(visible)
 }
 
+export async function definirMuteSrtPlayer(muted: boolean) {
+  return window.srtPlayer.setMute(muted)
+}
+
 export async function iniciarSrtPlayer(payload: { url: string; muted?: boolean; volume?: number }) {
   return window.srtPlayer.start(payload)
 }

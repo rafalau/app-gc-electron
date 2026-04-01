@@ -13,6 +13,6 @@ g++ \
   -O2 \
   "$SRC" \
   -o "$OUT" \
-  $(pkg-config --cflags --libs x11 libvlc)
+  $(pkg-config --cflags --libs x11)
 
 echo "Built $OUT"

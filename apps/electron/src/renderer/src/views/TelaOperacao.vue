@@ -28,10 +28,8 @@ import {
 } from '@renderer/services/srtPlayer.service'
 import {
   acionarOverlayVmix,
-  abrirMonitorSrtExterno,
   listarInputsVmix,
   obterConfiguracaoVmix,
-  pararMonitorSrtExterno,
   pararPreviewSrt,
   salvarConfiguracaoVmix
 } from '@renderer/services/config.service'
@@ -73,12 +71,9 @@ const erroLeilaoModal = ref('')
 const erroConfiguracaoModal = ref('')
 const erroOperacao = ref('')
 const erroInputsVmix = ref('')
-const erroSrtPreview = ref('')
 const carregandoInputsVmix = ref(false)
 const acionandoOverlayVmix = ref(false)
-const abrindoMonitorSrt = ref(false)
-const monitorSrtAberto = ref(false)
-const srtPlayerLigado = ref(true)
+const srtPlayerMutado = ref(false)
 const inputsVmix = ref<VmixInput[]>([])
 const seletorAnimalRef = ref<HTMLDivElement | null>(null)
 const srtPlayerHostRef = ref<HTMLDivElement | null>(null)
@@ -175,6 +170,9 @@ const srtConfigurado = computed(() => {
       Number(formVmix.value.srt.porta) > 0
   )
 })
+const algumModalAberto = computed(() => {
+  return Boolean(modalAberto.value || modalLeilaoAberto.value || modalConfiguracaoAberto.value)
+})
 const endpointSrt = computed(() => {
   if (!srtConfigurado.value) return ''
   return `srt://${formVmix.value.ip}:${formVmix.value.srt.porta}`
@@ -198,34 +196,17 @@ function fecharModalConfiguracao() {
   focarCampoLance()
 }
 
-async function toggleMonitorSrtExterno() {
-  abrindoMonitorSrt.value = true
-  erroSrtPreview.value = ''
-
-  try {
-    if (monitorSrtAberto.value) {
-      await pararMonitorSrtExterno()
-      monitorSrtAberto.value = false
-      return
-    }
-
-    const config = await obterConfiguracaoVmix()
-    await abrirMonitorSrtExterno(config)
-    monitorSrtAberto.value = true
-  } catch (error) {
-    erroSrtPreview.value = (error as Error).message
-  } finally {
-    abrindoMonitorSrt.value = false
-  }
-}
-
-async function toggleSrtPlayerLigado() {
-  srtPlayerLigado.value = !srtPlayerLigado.value
+async function toggleMuteSrtPlayer() {
+  srtPlayerMutado.value = !srtPlayerMutado.value
   await sincronizarPlaybackSrtPlayer()
 }
 
 async function sincronizarBoundsSrtPlayer() {
-  if (!srtConfigurado.value || !srtPlayerHostRef.value || !srtPlayerLigado.value) {
+  if (
+    !srtConfigurado.value ||
+    !srtPlayerHostRef.value ||
+    algumModalAberto.value
+  ) {
     await definirVisibilidadeSrtPlayer(false)
     return
   }
@@ -249,7 +230,7 @@ async function sincronizarBoundsSrtPlayer() {
 }
 
 async function sincronizarPlaybackSrtPlayer() {
-  if (!srtConfigurado.value || !srtPlayerLigado.value) {
+  if (!srtConfigurado.value || algumModalAberto.value) {
     await definirVisibilidadeSrtPlayer(false)
     await pararSrtPlayer()
     return
@@ -259,7 +240,7 @@ async function sincronizarPlaybackSrtPlayer() {
   await sincronizarBoundsSrtPlayer()
   await iniciarSrtPlayer({
     url: endpointSrt.value,
-    muted: false,
+    muted: srtPlayerMutado.value,
     volume: 100
   })
 }
@@ -663,6 +644,10 @@ watch(layoutInformacoesModo, () => {
   void sincronizarArquivo()
 })
 
+watch(algumModalAberto, () => {
+  void sincronizarPlaybackSrtPlayer()
+})
+
 onMounted(async () => {
   await window.janela.definirPreset('OPERACAO')
   formVmix.value = await obterConfiguracaoVmix()
@@ -717,7 +702,6 @@ onUnmounted(() => {
     window.removeEventListener('scroll', srtScrollSyncHandler, true)
     srtScrollSyncHandler = null
   }
-  void pararMonitorSrtExterno()
   void desligarSrtPlayer()
   void pararPreviewSrt()
 })
@@ -775,42 +759,18 @@ onUnmounted(() => {
           </div>
           <button
             type="button"
-            class="inline-flex h-7 items-center justify-center rounded-md border border-slate-300 bg-white px-2 text-[11px] font-semibold text-slate-700 transition hover:border-slate-400 hover:bg-slate-100"
-            @click="toggleSrtPlayerLigado"
+            class="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-300 bg-white text-sm text-slate-700 transition hover:border-slate-400 hover:bg-slate-100"
+            :title="srtPlayerMutado ? 'Ativar som' : 'Mutar som'"
+            @click="toggleMuteSrtPlayer"
           >
-            {{ srtPlayerLigado ? 'Fechar player' : 'Abrir player' }}
+            <i :class="['fas', srtPlayerMutado ? 'fa-volume-xmark' : 'fa-volume-high']" />
           </button>
         </div>
 
         <div
           ref="srtPlayerHostRef"
           class="aspect-video bg-black"
-        >
-          <div v-if="!srtPlayerLigado" class="flex h-full items-center justify-center">
-            <div class="w-full max-w-sm text-center">
-              <div class="text-lg font-semibold text-white">
-                Player SRT desligado
-              </div>
-              <div class="mt-2 break-all text-sm text-slate-300">
-                {{ erroSrtPreview || endpointSrt }}
-              </div>
-              <button
-                type="button"
-                class="mt-4 inline-flex items-center justify-center rounded-xl border border-white/15 bg-white/10 px-4 py-2 text-sm font-semibold text-white transition hover:bg-white/15 disabled:cursor-not-allowed disabled:opacity-60"
-                :disabled="abrindoMonitorSrt"
-                @click="toggleMonitorSrtExterno"
-              >
-                {{
-                  abrindoMonitorSrt
-                    ? 'Abrindo monitor...'
-                    : monitorSrtAberto
-                      ? 'Fechar Monitor VLC'
-                      : 'Abrir Monitor VLC'
-                }}
-              </button>
-            </div>
-          </div>
-        </div>
+        />
       </div>
 
       <div class="rounded-3xl border border-blue-300 bg-gradient-to-b from-blue-200 via-blue-100 to-white p-4 shadow-md shadow-blue-200/80">

@@ -14,6 +14,13 @@ import { useAnimais } from '@renderer/composables/useAnimais'
 import type { Animal } from '@renderer/types/animal'
 import { applyUppercaseInput } from '@renderer/utils/uppercaseInput'
 
+type DropdownItem = {
+  label: string
+  icon?: string
+  color?: 'default' | 'danger'
+  action: () => void
+}
+
 const router = useRouter()
 const route = useRoute()
 const leilaoId = route.params.id as string
@@ -94,6 +101,46 @@ const importItems = computed(() => [
     }
   }
 ])
+const gerenciarItems = computed(() => {
+  const items: DropdownItem[] = [
+    {
+      label: 'Configurações',
+      icon: 'fa-sliders-h',
+      action: () => {
+        abrirConfiguracoes()
+      }
+    }
+  ]
+
+  if (leilao.value && leilao.value.total_animais > 0) {
+    items.push(
+      {
+        label: 'Modo Conferência',
+        icon: 'fa-clipboard-check',
+        action: () => {
+          abrirConferencia()
+        }
+      },
+      {
+        label: 'Modo Operação',
+        icon: 'fa-broadcast-tower',
+        action: () => {
+          abrirModoOperacao()
+        }
+      },
+      {
+        label: 'Limpar',
+        icon: 'fa-trash-alt',
+        color: 'danger' as const,
+        action: () => {
+          abrirLimpar()
+        }
+      }
+    )
+  }
+
+  return items
+})
 
 function voltar() {
   router.push('/inicio')
@@ -188,37 +235,7 @@ function abrirModoOperacao(animal?: Animal) {
 
       <div class="flex flex-wrap items-center justify-end gap-2">
         <BaseDropdown :items="importItems" label="Importar" />
-        <BaseButton variante="secundario" class="w-full sm:w-auto" @click="abrirConfiguracoes">
-          <i class="fas fa-sliders-h mr-1" />
-          Configurações
-        </BaseButton>
-        <BaseButton
-          v-if="leilao && leilao.total_animais > 0"
-          variante="secundario"
-          class="w-full sm:w-auto"
-          @click="abrirConferencia"
-        >
-          <i class="fas fa-clipboard-check mr-1" />
-          Modo Conferência
-        </BaseButton>
-        <BaseButton
-          v-if="leilao && leilao.total_animais > 0"
-          variante="secundario"
-          class="w-full sm:w-auto"
-          @click="abrirModoOperacao()"
-        >
-          <i class="fas fa-broadcast-tower mr-1" />
-          Modo Operação
-        </BaseButton>
-        <BaseButton
-          v-if="leilao && leilao.total_animais > 0"
-          variante="perigo"
-          class="w-full sm:w-auto"
-          @click="abrirLimpar"
-        >
-          <i class="fas fa-trash-alt mr-1" />
-          Limpar
-        </BaseButton>
+        <BaseDropdown :items="gerenciarItems" label="Gerenciar" />
         <BaseButton variante="primario" class="w-full sm:w-auto" @click="abrirCriar">
           <i class="fas fa-plus mr-1" />
           Novo Animal

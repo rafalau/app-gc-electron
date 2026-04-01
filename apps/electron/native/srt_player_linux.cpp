@@ -1,24 +1,18 @@
 #include <X11/Xlib.h>
-#include <vlc/libvlc.h>
-#include <vlc/libvlc_media.h>
-#ifdef __cplusplus
-extern "C" {
-#endif
-typedef struct libvlc_renderer_item_t libvlc_renderer_item_t;
-#ifdef __cplusplus
-}
-#endif
-#include <vlc/libvlc_media_player.h>
 
 #include <atomic>
 #include <chrono>
+#include <csignal>
 #include <cstdlib>
 #include <cstring>
 #include <iostream>
 #include <sstream>
 #include <string>
 #include <thread>
-#include <vector>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/wait.h>
+#include <fcntl.h>
 
 namespace {
 
@@ -26,13 +20,14 @@ struct AppState {
   Display* display = nullptr;
   ::Window parent = 0;
   ::Window child = 0;
-  libvlc_instance_t* vlc = nullptr;
-  libvlc_media_player_t* player = nullptr;
   bool visible = false;
   int x = 0;
   int y = 0;
   int width = 640;
   int height = 360;
+  int volume = 100;
+  bool muted = false;
+  pid_t mpv_pid = -1;
 };
 
 std::atomic<bool> g_running(true);
@@ -77,67 +72,72 @@ bool init_x11(AppState& state, unsigned long parent_id) {
   return true;
 }
 
-bool init_vlc(AppState& state) {
-  const char* args[] = {
-    "--quiet",
-    "--no-video-title-show",
-    "--network-caching=300",
-    "--live-caching=300",
-    "--intf=dummy",
-    "--vout=xcb_xv"
-  };
-
-  state.vlc = libvlc_new(sizeof(args) / sizeof(args[0]), args);
-  if (!state.vlc) {
-    std::cerr << "ERRO: nao foi possivel inicializar o libVLC" << std::endl;
-    return false;
-  }
-
-  state.player = libvlc_media_player_new(state.vlc);
-  if (!state.player) {
-    std::cerr << "ERRO: nao foi possivel criar o media player do libVLC" << std::endl;
-    return false;
-  }
-
-  libvlc_media_player_set_xwindow(state.player, state.child);
-  libvlc_video_set_aspect_ratio(state.player, "16:9");
-  libvlc_video_set_scale(state.player, 0);
-  libvlc_video_set_crop_geometry(state.player, "16:9");
-  libvlc_audio_set_volume(state.player, 100);
-  return true;
-}
-
 void stop_media(AppState& state) {
-  if (!state.player) return;
-  libvlc_media_player_stop(state.player);
+  if (state.mpv_pid <= 0) return;
+
+  kill(state.mpv_pid, SIGTERM);
+  waitpid(state.mpv_pid, nullptr, 0);
+  state.mpv_pid = -1;
 }
 
 void play_media(AppState& state, const std::string& url) {
-  if (!state.player || !state.vlc) return;
+  stop_media(state);
 
-  libvlc_media_t* media = libvlc_media_new_location(state.vlc, url.c_str());
-  if (!media) {
-    std::cerr << "ERRO: nao foi possivel criar a media do libVLC" << std::endl;
+  state.visible = true;
+  sync_window(state);
+
+  pid_t pid = fork();
+  if (pid < 0) {
+    std::cerr << "ERRO: nao foi possivel iniciar o mpv" << std::endl;
     return;
   }
 
-  libvlc_media_player_set_media(state.player, media);
-  libvlc_media_release(media);
-  libvlc_media_player_play(state.player);
+  if (pid == 0) {
+    const int null_fd = open("/dev/null", O_WRONLY);
+    if (null_fd >= 0) {
+      dup2(null_fd, STDOUT_FILENO);
+      dup2(null_fd, STDERR_FILENO);
+      close(null_fd);
+    }
+
+    const std::string wid = std::to_string(static_cast<unsigned long>(state.child));
+    const std::string volume = std::to_string(state.volume);
+    const char* mute = state.muted ? "yes" : "no";
+
+    execlp(
+      "mpv",
+      "mpv",
+      "--no-config",
+      "--force-window=yes",
+      "--idle=no",
+      "--keep-open=no",
+      "--osc=no",
+      "--osd-level=0",
+      "--msg-level=all=no",
+      "--terminal=no",
+      "--input-default-bindings=no",
+      "--input-vo-keyboard=no",
+      "--hwdec=no",
+      "--profile=sw-fast",
+      "--video-sync=display-resample",
+      "--audio-display=no",
+      "--cache=yes",
+      "--demuxer-max-back-bytes=50MiB",
+      "--demuxer-max-bytes=50MiB",
+      ("--wid=" + wid).c_str(),
+      ("--volume=" + volume).c_str(),
+      ("--mute=" + std::string(mute)).c_str(),
+      url.c_str(),
+      static_cast<char*>(nullptr));
+
+    _exit(1);
+  }
+
+  state.mpv_pid = pid;
 }
 
 void cleanup(AppState& state) {
   stop_media(state);
-
-  if (state.player) {
-    libvlc_media_player_release(state.player);
-    state.player = nullptr;
-  }
-
-  if (state.vlc) {
-    libvlc_release(state.vlc);
-    state.vlc = nullptr;
-  }
 
   if (state.display && state.child) {
     XDestroyWindow(state.display, state.child);
@@ -147,6 +147,16 @@ void cleanup(AppState& state) {
   if (state.display) {
     XCloseDisplay(state.display);
     state.display = nullptr;
+  }
+}
+
+void reap_child_if_needed(AppState& state) {
+  if (state.mpv_pid <= 0) return;
+
+  int status = 0;
+  pid_t result = waitpid(state.mpv_pid, &status, WNOHANG);
+  if (result == state.mpv_pid) {
+    state.mpv_pid = -1;
   }
 }
 
@@ -160,8 +170,6 @@ void handle_command(AppState& state, const std::string& line) {
     iss >> url;
     if (!url.empty()) {
       play_media(state, url);
-      state.visible = true;
-      sync_window(state);
     }
     return;
   }
@@ -193,7 +201,7 @@ void handle_command(AppState& state, const std::string& line) {
   if (cmd == "MUTE") {
     int value = 0;
     iss >> value;
-    libvlc_audio_set_mute(state.player, value != 0 ? 1 : 0);
+    state.muted = value != 0;
     return;
   }
 
@@ -202,7 +210,7 @@ void handle_command(AppState& state, const std::string& line) {
     iss >> value;
     if (value < 0) value = 0;
     if (value > 200) value = 200;
-    libvlc_audio_set_volume(state.player, value);
+    state.volume = value;
     return;
   }
 
@@ -223,10 +231,6 @@ int main(int argc, char** argv) {
   AppState state;
 
   if (!init_x11(state, parent_id)) return 1;
-  if (!init_vlc(state)) {
-    cleanup(state);
-    return 1;
-  }
 
   std::thread input_thread([&state]() {
     std::string line;
@@ -242,6 +246,7 @@ int main(int argc, char** argv) {
       XNextEvent(state.display, &event);
     }
 
+    reap_child_if_needed(state);
     std::this_thread::sleep_for(std::chrono::milliseconds(16));
   }
 

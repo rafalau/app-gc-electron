@@ -193,6 +193,7 @@ if (process.contextIsolated) {
       setBounds: (bounds: { x: number; y: number; width: number; height: number }) =>
         ipcRenderer.invoke('srt-player:setBounds', bounds),
       setVisible: (visible: boolean) => ipcRenderer.invoke('srt-player:setVisible', visible),
+      setMute: (muted: boolean) => ipcRenderer.invoke('srt-player:setMute', muted),
       start: (payload: { url: string; muted?: boolean; volume?: number }) =>
         ipcRenderer.invoke('srt-player:start', payload),
       stop: () => ipcRenderer.invoke('srt-player:stop'),

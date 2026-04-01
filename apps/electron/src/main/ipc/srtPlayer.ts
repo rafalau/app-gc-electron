@@ -2,6 +2,7 @@ import { BrowserWindow, ipcMain } from 'electron'
 import {
   ensureSrtPlayerWindow,
   setSrtPlayerBounds,
+  setSrtPlayerMuted,
   setSrtPlayerVisible,
   startSrtPlayer,
   stopSrtPlayback,
@@ -27,6 +28,11 @@ export function registrarIpcSrtPlayer() {
 
   ipcMain.handle('srt-player:setVisible', async (_evt, visible: boolean) => {
     setSrtPlayerVisible(Boolean(visible))
+    return { ok: true }
+  })
+
+  ipcMain.handle('srt-player:setMute', async (_evt, muted: boolean) => {
+    setSrtPlayerMuted(Boolean(muted))
     return { ok: true }
   })
 

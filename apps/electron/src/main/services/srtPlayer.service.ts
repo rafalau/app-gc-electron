@@ -1,5 +1,6 @@
 import { app, BrowserWindow } from 'electron'
 import { spawn, type ChildProcess } from 'node:child_process'
+import { existsSync } from 'node:fs'
 import { join } from 'node:path'
 
 type BoundsPayload = {
@@ -19,12 +20,56 @@ let playerProcess: ChildProcess | null = null
 let parentBrowserWindow: BrowserWindow | null = null
 let parentWindowId: string | null = null
 
-function getHelperPath() {
+type SupportedPlatform = 'linux' | 'win32'
+
+function isSupportedPlatform(platform: NodeJS.Platform): platform is SupportedPlatform {
+  return platform === 'linux' || platform === 'win32'
+}
+
+function getResourceRoot() {
   if (app.isPackaged) {
-    return join(process.resourcesPath, 'bin', 'srt-player-linux')
+    return process.resourcesPath
   }
 
-  return join(app.getAppPath(), 'resources/bin/srt-player-linux')
+  return join(app.getAppPath(), 'resources')
+}
+
+function getHelperExecutableName() {
+  if (process.platform === 'win32') return 'srt-player-win.exe'
+  return 'srt-player-linux'
+}
+
+function getHelperPath() {
+  if (!isSupportedPlatform(process.platform)) {
+    throw new Error(`Player SRT não suportado em ${process.platform}.`)
+  }
+
+  const helperPath = join(getResourceRoot(), 'bin', getHelperExecutableName())
+
+  if (!existsSync(helperPath)) {
+    throw new Error(
+      `Helper do player SRT não encontrado em ${helperPath}. Gere ou empacote o binário desta plataforma.`
+    )
+  }
+
+  return helperPath
+}
+
+function getPlayerRuntimePath() {
+  return join(getResourceRoot(), 'runtime', 'mpv', process.platform)
+}
+
+function getChildEnv() {
+  const env = { ...process.env }
+  const runtimePath = getPlayerRuntimePath()
+
+  if (!existsSync(runtimePath)) return env
+
+  const pathKey = process.platform === 'win32' ? 'Path' : 'PATH'
+  const currentPath = env[pathKey] ?? ''
+  env[pathKey] = currentPath ? `${runtimePath}${process.platform === 'win32' ? ';' : ':'}${currentPath}` : runtimePath
+
+  return env
 }
 
 function getParentWindowHex(window: BrowserWindow) {
@@ -47,7 +92,7 @@ function sendCommand(command: string) {
 }
 
 export function ensureSrtPlayerWindow(window: BrowserWindow) {
-  if (process.platform !== 'linux') return
+  if (!isSupportedPlatform(process.platform)) return
 
   const windowId = getParentWindowHex(window)
 
@@ -61,7 +106,8 @@ export function ensureSrtPlayerWindow(window: BrowserWindow) {
   parentWindowId = windowId
 
   const childProcess = spawn(getHelperPath(), [windowId], {
-    stdio: ['pipe', 'ignore', 'pipe']
+    stdio: ['pipe', 'ignore', 'pipe'],
+    env: getChildEnv()
   })
   playerProcess = childProcess
 
@@ -101,6 +147,10 @@ export function setSrtPlayerBounds(bounds: BoundsPayload) {
 
 export function setSrtPlayerVisible(visible: boolean) {
   sendCommand(`VISIBLE ${visible ? 1 : 0}`)
+}
+
+export function setSrtPlayerMuted(muted: boolean) {
+  sendCommand(`MUTE ${muted ? 1 : 0}`)
 }
 
 export function startSrtPlayer(payload: StartPayload) {

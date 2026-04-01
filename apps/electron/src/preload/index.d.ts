@@ -224,6 +224,7 @@ declare global {
       prepare: () => Promise<{ ok: boolean }>
       setBounds: (bounds: { x: number; y: number; width: number; height: number }) => Promise<{ ok: boolean }>
       setVisible: (visible: boolean) => Promise<{ ok: boolean }>
+      setMute: (muted: boolean) => Promise<{ ok: boolean }>
       start: (payload: { url: string; muted?: boolean; volume?: number }) => Promise<{ ok: boolean }>
       stop: () => Promise<{ ok: boolean }>
       shutdown: () => Promise<{ ok: boolean }>
