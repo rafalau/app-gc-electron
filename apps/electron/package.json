@@ -25,6 +25,7 @@
     "build:win": "npm run build && npm run install-app-deps && electron-builder --win",
     "build:win:host": "npm run build:host && npm run install-app-deps && cross-env APP_MODE=HOST electron-builder --win --config electron-builder.host.yml",
     "build:win:remoto": "npm run build:remoto && npm run install-app-deps && cross-env APP_MODE=REMOTO electron-builder --win --config electron-builder.remoto.yml",
+    "build:win:all": "npm run build:win:host && npm run build:win:remoto",
     "build:mac": "npm run build && npm run install-app-deps && electron-builder --mac",
     "build:linux": "npm run build && npm run install-app-deps && electron-builder --linux",
     "build:linux:host": "npm run build:host && npm run install-app-deps && cross-env APP_MODE=HOST electron-builder --linux --config electron-builder.host.yml",

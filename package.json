@@ -14,6 +14,7 @@
     "dev:host": "npm -w apps/electron run dev:host",
     "dev:remoto": "npm -w apps/electron run dev:remoto",
     "build": "npm -w apps/electron run build",
+    "build:win:all": "npm -w apps/electron run build:win:all",
     "prisma:generate": "cross-env DATABASE_URL=file:./apps/electron/prisma/dev.db prisma generate --schema apps/electron/prisma/schema.prisma",
     "prisma:migrate": "cross-env DATABASE_URL=file:./apps/electron/prisma/dev.db prisma migrate dev --schema apps/electron/prisma/schema.prisma",
     "postinstall": "cross-env DATABASE_URL=file:./apps/electron/prisma/dev.db prisma generate --schema apps/electron/prisma/schema.prisma",
