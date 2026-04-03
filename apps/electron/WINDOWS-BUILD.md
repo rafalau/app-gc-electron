@@ -87,3 +87,29 @@ Quando o app estiver fechado, o próximo acabamento natural é:
 ## Observação importante
 
 O helper Windows e o runtime já estão presentes no projeto, mas a validação real ainda precisa ser feita em uma máquina Windows. Ou seja: a estrutura está pronta para empacotar, mas o teste final no Windows ainda faz parte da entrega.
+
+## Troubleshooting rápido
+
+Se o `npm` mostrar apenas `Lifecycle script failed`, separe o build em etapas para ver a falha real:
+
+```bash
+npm -w apps/electron run typecheck
+```
+
+```bash
+npm -w apps/electron run build:host
+```
+
+```bash
+npm -w apps/electron run install-app-deps
+```
+
+```bash
+cross-env APP_MODE=HOST npm -w apps/electron exec electron-builder --win --config electron-builder.host.yml
+```
+
+Neste projeto, a causa mais comum no Windows é o rebuild de dependência nativa usado pelo Prisma (`better-sqlite3`). Se `install-app-deps` falhar, verifique:
+
+1. se `npm install` foi executado no próprio Windows
+2. se `npm run prisma:generate` foi executado na raiz
+3. se a máquina tem Visual Studio Build Tools com C++ e Python
