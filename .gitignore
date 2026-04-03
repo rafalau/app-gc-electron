@@ -59,3 +59,7 @@ apps/electron/prisma/dev.db-journal
 
 # Swap
 *.swp
+
+# Local Codex artifacts
+.codex
+.codex/
