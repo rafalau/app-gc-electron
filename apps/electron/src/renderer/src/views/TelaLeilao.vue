@@ -120,6 +120,13 @@ const gerenciarItems = computed(() => {
       action: () => {
         abrirConfiguracoes()
       }
+    },
+    {
+      label: 'Edição Rápida',
+      icon: 'fa-table',
+      action: () => {
+        void abrirEdicaoRapida()
+      }
     }
   ]
 
@@ -208,6 +215,10 @@ function abrirModoOperacao(animal?: Animal) {
     path: `/operacao/${leilaoId}`,
     query: animal ? { animalId: animal.id } : {}
   })
+}
+
+async function abrirEdicaoRapida(animal?: Animal) {
+  await window.janela.abrirEdicaoRapida(leilaoId, animal?.id)
 }
 
 onMounted(async () => {

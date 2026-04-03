@@ -1,4 +1,9 @@
-import type { Animal, AnimalAtualizarPayload, AnimalCriarPayload } from '../types/animal'
+import type {
+  Animal,
+  AnimalAtualizacaoEmLotePayload,
+  AnimalAtualizarPayload,
+  AnimalCriarPayload
+} from '../types/animal'
 
 export async function listarAnimaisPorLeilao(leilaoId: string): Promise<Animal[]> {
   return window.animais.listarPorLeilao(leilaoId)
@@ -10,6 +15,12 @@ export async function criarAnimal(payload: AnimalCriarPayload): Promise<Animal> 
 
 export async function atualizarAnimal(id: string, payload: AnimalAtualizarPayload): Promise<Animal> {
   return window.animais.atualizar(id, payload)
+}
+
+export async function atualizarAnimaisEmLote(
+  payloads: AnimalAtualizacaoEmLotePayload[]
+): Promise<Animal[]> {
+  return window.animais.atualizarEmLote(payloads)
 }
 
 export async function removerAnimal(id: string): Promise<boolean> {

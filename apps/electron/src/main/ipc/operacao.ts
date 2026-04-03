@@ -12,6 +12,7 @@ import {
 } from './leiloes'
 import {
   atualizarAnimalLocal,
+  atualizarAnimaisEmLoteLocal,
   criarAnimalLocal,
   listarAnimaisPorLeilaoLocal,
   removerAnimalLocal,
@@ -228,7 +229,7 @@ function responderJson(
     'Cache-Control': 'no-store, no-cache, must-revalidate, proxy-revalidate',
     'Access-Control-Allow-Origin': '*',
     'Access-Control-Allow-Headers': 'Content-Type',
-    'Access-Control-Allow-Methods': 'GET,POST,OPTIONS'
+    'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS'
   })
   res.end(JSON.stringify(body))
 }
@@ -451,6 +452,7 @@ export async function ensureOperacaoServer() {
     const matchLeiloes = url.match(/^\/sync\/leiloes$/)
     const matchLeilao = url.match(/^\/sync\/leiloes\/([^/]+)$/)
     const matchAnimais = url.match(/^\/sync\/animais\/([^/]+)$/)
+    const matchAnimaisLote = url.match(/^\/sync\/animais-lote$/)
     const matchAnimal = url.match(/^\/sync\/animal\/([^/]+)$/)
     const matchAnimaisLimpar = url.match(/^\/sync\/animais-leilao\/([^/]+)$/)
     const matchLayout = url.match(/^\/sync\/layout\/([^/]+)$/)
@@ -463,7 +465,7 @@ export async function ensureOperacaoServer() {
       res.writeHead(204, {
         'Access-Control-Allow-Origin': '*',
         'Access-Control-Allow-Headers': 'Content-Type',
-        'Access-Control-Allow-Methods': 'GET,POST,OPTIONS'
+        'Access-Control-Allow-Methods': 'GET,POST,PUT,DELETE,OPTIONS'
       })
       res.end()
       return
@@ -612,6 +614,18 @@ export async function ensureOperacaoServer() {
         publicarSyncEvento('leiloes')
         publicarSyncEvento(`animais:${leilaoId}`)
         responderJson(res, 200, created)
+        return
+      }
+
+      if (matchAnimaisLote && req.method === 'PUT') {
+        const payload = await lerCorpoJson(req)
+        const updated = await atualizarAnimaisEmLoteLocal(Array.isArray(payload) ? payload : [])
+        const leilaoId = updated[0]?.leilao_id
+        if (leilaoId) {
+          publicarSyncEvento('leiloes')
+          publicarSyncEvento(`animais:${leilaoId}`)
+        }
+        responderJson(res, 200, updated)
         return
       }
 

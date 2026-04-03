@@ -38,3 +38,7 @@ export type AnimalCriarPayload = {
 }
 
 export type AnimalAtualizarPayload = Partial<Omit<AnimalCriarPayload, 'leilao_id'>>
+
+export type AnimalAtualizacaoEmLotePayload = {
+  id: string
+} & AnimalAtualizarPayload

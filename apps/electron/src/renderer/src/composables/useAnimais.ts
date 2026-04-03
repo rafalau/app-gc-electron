@@ -135,6 +135,7 @@ export function useAnimais(leilaoId: string) {
   const layoutInformacoesModo = ref<LayoutInformacoesAnimais>('AGREGADAS')
   const incluirRacaNasImportacoes = ref(false)
   let eventSource: EventSource | null = null
+  let primeiroEventoSyncRecebido = false
 
   function erroDeConexaoRemota(error: unknown) {
     const message = (error as Error)?.message ?? ''
@@ -430,6 +431,11 @@ export function useAnimais(leilaoId: string) {
         `${conexao.baseUrl}/sync/events/${encodeURIComponent(`animais:${leilaoId}`)}`
       )
       eventSource.onmessage = () => {
+        if (!primeiroEventoSyncRecebido) {
+          primeiroEventoSyncRecebido = true
+          void carregar()
+          return
+        }
         void carregar()
       }
       eventSource.onerror = () => {

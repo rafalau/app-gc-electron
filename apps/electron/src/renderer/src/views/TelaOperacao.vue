@@ -532,6 +532,10 @@ function editarAnimalSelecionado() {
   abrirEditar(animalSelecionado.value)
 }
 
+async function abrirEdicaoRapida() {
+  await window.janela.abrirEdicaoRapida(leilaoId, animalSelecionado.value?.id)
+}
+
 function selecionarAnimalOperacao(animalId: string) {
   animalSelecionadoId.value = animalId
   buscaAnimal.value = ''
@@ -839,6 +843,15 @@ onUnmounted(() => {
         <button
           type="button"
           class="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
+          @click="abrirEdicaoRapida"
+        >
+          <i class="fas fa-table text-xs" />
+          Edição Rápida
+        </button>
+
+        <button
+          type="button"
+          class="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
           @click="abrirModalConfiguracao"
         >
           <i class="fas fa-gear text-xs" />
@@ -973,6 +986,7 @@ onUnmounted(() => {
               type="button"
               class="inline-flex h-12 w-12 shrink-0 items-center justify-center rounded-xl border border-slate-200 bg-slate-50 text-slate-600 shadow-sm transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
               :disabled="!animalSelecionado"
+              title="Editar animal"
               @click="editarAnimalSelecionado"
             >
               <i class="fas fa-pen text-sm" />

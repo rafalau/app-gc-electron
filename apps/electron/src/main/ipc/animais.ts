@@ -25,6 +25,9 @@ type AnimalCriarPayload = {
 }
 
 type AnimalAtualizarPayload = Partial<Omit<AnimalCriarPayload, 'leilao_id'>>
+type AnimalAtualizacaoEmLotePayload = {
+  id: string
+} & AnimalAtualizarPayload
 
 function upper(value?: string | null) {
   return String(value ?? '').trim().toUpperCase()
@@ -323,6 +326,17 @@ export async function atualizarAnimalLocal(id: string, payload: AnimalAtualizarP
   return serializar(animal)
 }
 
+export async function atualizarAnimaisEmLoteLocal(payloads: AnimalAtualizacaoEmLotePayload[]) {
+  const atualizados: Awaited<ReturnType<typeof atualizarAnimalLocal>>[] = []
+
+  for (const payload of payloads) {
+    const { id, ...dados } = payload
+    atualizados.push(await atualizarAnimalLocal(id, dados))
+  }
+
+  return atualizados
+}
+
 export async function removerAnimalLocal(id: string) {
   const prisma = await getPrisma()
   await prisma.animal.delete({ where: { id } })
@@ -374,6 +388,32 @@ export function registrarIpcAnimais() {
     const updated = await atualizarAnimalLocal(id, payload)
     publicarSyncEvento('leiloes')
     publicarSyncEvento(`animais:${updated.leilao_id}`)
+    return updated
+  })
+
+  ipcMain.handle('animais:atualizarEmLote', async (_evt, payloads: AnimalAtualizacaoEmLotePayload[]) => {
+    if (!Array.isArray(payloads) || payloads.length === 0) return []
+
+    const conexao = await getModoConexaoOperacao()
+
+    if (conexao.modo === 'REMOTO') {
+      return fetchRemotoJson(
+        `${conexao.baseUrl}/sync/animais-lote`,
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payloads)
+        }
+      )
+    }
+
+    await ensureOperacaoServer()
+    const updated = await atualizarAnimaisEmLoteLocal(payloads)
+    const canalLeilaoId = updated[0]?.leilao_id
+    if (canalLeilaoId) {
+      publicarSyncEvento('leiloes')
+      publicarSyncEvento(`animais:${canalLeilaoId}`)
+    }
     return updated
   })
 

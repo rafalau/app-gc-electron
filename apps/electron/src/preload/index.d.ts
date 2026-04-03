@@ -61,6 +61,10 @@ export type AnimalCriarPayload = {
 
 export type AnimalAtualizarPayload = Partial<Omit<AnimalCriarPayload, 'leilao_id'>>
 
+export type AnimalAtualizacaoEmLotePayload = {
+  id: string
+} & AnimalAtualizarPayload
+
 export type ImportSummary = {
   totalRead: number
   imported: number
@@ -199,6 +203,7 @@ declare global {
       listarPorLeilao: (leilaoId: string) => Promise<Animal[]>
       criar: (payload: AnimalCriarPayload) => Promise<Animal>
       atualizar: (id: string, payload: AnimalAtualizarPayload) => Promise<Animal>
+      atualizarEmLote: (payloads: AnimalAtualizacaoEmLotePayload[]) => Promise<Animal[]>
       remover: (id: string) => Promise<boolean>
       removerPorLeilao: (leilaoId: string) => Promise<boolean>
     }
@@ -236,6 +241,7 @@ declare global {
     }
     janela: {
       definirPreset: (preset: 'DESKTOP' | 'OPERACAO') => Promise<void>
+      abrirEdicaoRapida: (leilaoId: string, animalId?: string) => Promise<void>
     }
     srtPlayer: {
       prepare: () => Promise<{ ok: boolean }>

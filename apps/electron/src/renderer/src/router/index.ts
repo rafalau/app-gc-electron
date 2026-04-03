@@ -5,6 +5,7 @@ import TelaConfiguracoes from '../views/TelaConfiguracoes.vue'
 import TelaLeilao from '../views/TelaLeilao.vue'
 import TelaOperacao from '../views/TelaOperacao.vue'
 import TelaConexaoRemota from '../views/TelaConexaoRemota.vue'
+import TelaEdicaoRapidaAnimais from '../views/TelaEdicaoRapidaAnimais.vue'
 
 export const router = createRouter({
   history: createWebHashHistory(),
@@ -14,7 +15,8 @@ export const router = createRouter({
     { path: '/inicio', component: TelaInicio },
     { path: '/configuracoes', component: TelaConfiguracoes },
     { path: '/leilao/:id', component: TelaLeilao },
-    { path: '/operacao/:id', component: TelaOperacao }
+    { path: '/operacao/:id', component: TelaOperacao },
+    { path: '/edicao-rapida/:id', component: TelaEdicaoRapidaAnimais }
   ]
 })
 

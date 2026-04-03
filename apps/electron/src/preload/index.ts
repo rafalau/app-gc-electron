@@ -29,6 +29,9 @@ type AnimalCriarPayload = {
 }
 
 type AnimalAtualizarPayload = Partial<Omit<AnimalCriarPayload, 'leilao_id'>>
+type AnimalAtualizacaoEmLotePayload = {
+  id: string
+} & AnimalAtualizarPayload
 
 type Leilao = {
   id: string
@@ -160,6 +163,8 @@ if (process.contextIsolated) {
       criar: (payload: AnimalCriarPayload) => ipcRenderer.invoke('animais:criar', payload),
       atualizar: (id: string, payload: AnimalAtualizarPayload) =>
         ipcRenderer.invoke('animais:atualizar', id, payload),
+      atualizarEmLote: (payloads: AnimalAtualizacaoEmLotePayload[]) =>
+        ipcRenderer.invoke('animais:atualizarEmLote', payloads),
       remover: (id: string) => ipcRenderer.invoke('animais:remover', id),
       removerPorLeilao: (leilaoId: string) => ipcRenderer.invoke('animais:removerPorLeilao', leilaoId)
     })
@@ -201,7 +206,9 @@ if (process.contextIsolated) {
 
     contextBridge.exposeInMainWorld('janela', {
       definirPreset: (preset: 'DESKTOP' | 'OPERACAO') =>
-        ipcRenderer.invoke('janela:definirPreset', preset)
+        ipcRenderer.invoke('janela:definirPreset', preset),
+      abrirEdicaoRapida: (leilaoId: string, animalId?: string) =>
+        ipcRenderer.invoke('janela:abrirEdicaoRapida', leilaoId, animalId)
     })
 
     contextBridge.exposeInMainWorld('srtPlayer', {
