@@ -4,13 +4,17 @@ import vue from '@vitejs/plugin-vue'
 import tailwindcss from '@tailwindcss/vite'
 
 const appMode = process.env.APP_MODE ?? ''
+const disableBytecode = process.env.APP_DISABLE_BYTECODE === '1'
+const mainPlugins = disableBytecode
+  ? [externalizeDepsPlugin()]
+  : [externalizeDepsPlugin(), bytecodePlugin()]
 
 export default defineConfig({
   main: {
     define: {
       __APP_MODE__: JSON.stringify(appMode)
     },
-    plugins: [externalizeDepsPlugin(), bytecodePlugin()],
+    plugins: mainPlugins,
     build: {
       rollupOptions: {
         external: [
@@ -29,7 +33,7 @@ export default defineConfig({
     define: {
       __APP_MODE__: JSON.stringify(appMode)
     },
-    plugins: [externalizeDepsPlugin(), bytecodePlugin()]
+    plugins: mainPlugins
   },
   renderer: {
     define: {

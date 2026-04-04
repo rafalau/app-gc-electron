@@ -30,7 +30,10 @@
     "build:mac": "npm run build && npm run install-app-deps && electron-builder --mac",
     "build:linux": "npm run build && npm run install-app-deps && electron-builder --linux",
     "build:linux:host": "npm run build:host && npm run install-app-deps && cross-env APP_MODE=HOST electron-builder --linux --config electron-builder.host.yml",
-    "build:linux:remoto": "npm run build:remoto && npm run install-app-deps && cross-env APP_MODE=REMOTO electron-builder --linux --config electron-builder.remoto.yml"
+    "build:linux:remoto": "npm run build:remoto && npm run install-app-deps && cross-env APP_MODE=REMOTO electron-builder --linux --config electron-builder.remoto.yml",
+    "package:linux:portable:host": "cross-env APP_MODE=HOST APP_DISABLE_BYTECODE=1 npm run typecheck && cross-env APP_MODE=HOST APP_DISABLE_BYTECODE=1 electron-vite build && bash ./scripts/package-linux-portable.sh HOST",
+    "package:linux:portable:remoto": "cross-env APP_MODE=REMOTO APP_DISABLE_BYTECODE=1 npm run typecheck && cross-env APP_MODE=REMOTO APP_DISABLE_BYTECODE=1 electron-vite build && bash ./scripts/package-linux-portable.sh REMOTO",
+    "package:linux:portable:all": "npm run package:linux:portable:host && npm run package:linux:portable:remoto"
   },
   "dependencies": {
     "@electron-toolkit/preload": "^3.0.0",

@@ -239,7 +239,7 @@ function migrateDeployPackaged() {
 }
 
 export async function migrateDeploy() {
-  if (app.isPackaged) {
+  if (app.isPackaged || process.env.APP_GC_PORTABLE === '1') {
     migrateDeployPackaged()
     return
   }
@@ -254,4 +254,3 @@ export async function migrateDeploy() {
     migrateDeployPackaged()
   }
 }
-

@@ -285,6 +285,21 @@ Arquivos esperados:
 
 ## Compilar para Linux
 
+### Pacotes portateis
+
+Na raiz:
+
+```bash
+npm -w apps/electron run package:linux:portable:all
+```
+
+Tambem e possivel gerar separado:
+
+```bash
+npm -w apps/electron run package:linux:portable:host
+npm -w apps/electron run package:linux:portable:remoto
+```
+
 ### Build padrao
 
 Na raiz:
@@ -321,6 +336,33 @@ Os artefatos sao gerados em:
 ```text
 apps/electron/dist/
 ```
+
+Arquivos esperados:
+
+- `app-gc-linux-host.tar.gz`
+- `app-gc-linux-remoto.tar.gz`
+
+### Instalar HOST no Linux
+
+```bash
+rm -rf ~/.local/opt/app-gc-linux-host
+mkdir -p ~/.local/opt
+tar -xzf /caminho/para/app-gc-linux-host.tar.gz -C ~/.local/opt
+~/.local/opt/app-gc-linux-host/install-desktop-entry.sh
+~/.local/opt/app-gc-linux-host/run-app-gc-host.sh
+```
+
+### Instalar REMOTO no Linux
+
+```bash
+rm -rf ~/.local/opt/app-gc-linux-remoto
+mkdir -p ~/.local/opt
+tar -xzf /caminho/para/app-gc-linux-remoto.tar.gz -C ~/.local/opt
+~/.local/opt/app-gc-linux-remoto/install-desktop-entry.sh
+~/.local/opt/app-gc-linux-remoto/run-app-gc-remoto.sh
+```
+
+Os scripts `install-desktop-entry.sh` criam o atalho no menu do Linux usando o `icon.png` do aplicativo.
 
 ## Endpoints e integracoes relevantes
 
