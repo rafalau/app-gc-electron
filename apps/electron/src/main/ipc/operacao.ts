@@ -101,33 +101,62 @@ function getAppModeOverride(): ModoOperacao {
   return null
 }
 
+function isPrivateIpv4(address: string) {
+  return (
+    /^10\./.test(address) ||
+    /^192\.168\./.test(address) ||
+    /^172\.(1[6-9]|2\d|3[0-1])\./.test(address)
+  )
+}
+
+function isZeroTierInterface(nome: string) {
+  return /^zt/i.test(nome) || /zerotier/i.test(nome)
+}
+
+function isPreferredLanInterface(nome: string) {
+  return /^(eth|en|eno|ens|enp|wlan|wifi|wl)/i.test(nome)
+}
+
 function getLocalIps() {
   const nets = networkInterfaces()
-  const ips = new Set<string>()
-  let zeroTierIp = ''
+  const zeroTierIps = new Set<string>()
+  const lanIpsPreferenciais = new Set<string>()
+  const lanIpsSecundarios = new Set<string>()
 
-  for (const nome of Object.keys(nets)) {
-    for (const net of nets[nome] ?? []) {
+  for (const [nome, interfaces] of Object.entries(nets)) {
+    for (const net of interfaces ?? []) {
       if (net.family !== 'IPv4' || net.internal) continue
-      ips.add(net.address)
 
-      if (!zeroTierIp && /^zt/i.test(nome)) {
-        zeroTierIp = net.address
+      if (isZeroTierInterface(nome)) {
+        zeroTierIps.add(net.address)
+        continue
+      }
+
+      if (!isPrivateIpv4(net.address)) continue
+
+      if (isPreferredLanInterface(nome)) {
+        lanIpsPreferenciais.add(net.address)
+      } else {
+        lanIpsSecundarios.add(net.address)
       }
     }
   }
 
-  if (ips.size === 0) {
+  const lanIp = Array.from(lanIpsPreferenciais)[0] ?? Array.from(lanIpsSecundarios)[0] ?? ''
+  const zeroTierIp = Array.from(zeroTierIps)[0] ?? ''
+  const selecionados = [zeroTierIp, lanIp].filter(Boolean)
+  const all = Array.from(new Set(selecionados))
+
+  if (all.length === 0) {
     return {
       primary: '127.0.0.1',
       all: ['127.0.0.1']
     }
   }
 
-  const all = Array.from(ips)
   return {
-    primary: zeroTierIp || all[0],
-    all: zeroTierIp ? [zeroTierIp, ...all.filter((ip) => ip !== zeroTierIp)] : all
+    primary: zeroTierIp || lanIp || all[0],
+    all
   }
 }
 
