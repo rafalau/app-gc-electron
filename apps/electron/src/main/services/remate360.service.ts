@@ -3,7 +3,11 @@ import type { AnimalImportInput, ImportSummary } from './animalImport.service'
 import { importAnimais } from './animalImport.service'
 
 const REMATE360_EVENTS_URL =
-  'https://api-integrador.remate360.com.br/api/public/nDheufokI7GohsxiVjEmXCSIX6sPffyIn3YJGhA1lbLyoZU2VRRzEu6d6EhX5nY2/eventos'
+  'https://api-integrador.remate360.com.br/api/public/NnngF8tD8xIPVLQe1UK3fI0MHHqbKmdIZtgECOGiJR7IvFSHjSjWhbBm3yuaYpNH/eventos'
+
+export function isRemate360Url(url: string) {
+  return String(url ?? '').includes('api-integrador.remate360.com.br')
+}
 
 export type Remate360EventOption = {
   id: number
@@ -27,6 +31,7 @@ interface Remate360Animal {
   pelagem?: string | null
   nascimento?: string | null
   nome_proprietario?: string | null
+  vendedor?: string | null
   genealogia?: Remate360Genealogia | null
 }
 
@@ -40,6 +45,8 @@ interface Remate360EventResponse {
 
 interface Remate360EventsResponse {
   eventos?: Remate360EventResponse[] | null
+  error?: string | null
+  message?: string | null
 }
 
 function upper(value?: string | null) {
@@ -79,7 +86,7 @@ function toAnimalInput(animal: Remate360Animal): AnimalImportInput {
     pelagem: upper(animal.pelagem),
     nascimento: String(animal.nascimento ?? '').trim().toUpperCase(),
     categoria: 'ANIMAIS',
-    vendedor: upper(animal.nome_proprietario),
+    vendedor: upper(animal.vendedor ?? animal.nome_proprietario),
     informacoes: '',
     genealogia: buildGenealogia(animal.genealogia),
     condicoes_cobertura: []
@@ -89,6 +96,7 @@ function toAnimalInput(animal: Remate360Animal): AnimalImportInput {
 export const remate360Service = {
   async listEvents(): Promise<Remate360EventOption[]> {
     const data = await requestJson<Remate360EventsResponse>(REMATE360_EVENTS_URL)
+    ensureValidRemate360Response(data)
     const eventos = Array.isArray(data.eventos) ? data.eventos : []
     return eventos.map(asEventOption).filter((event) => event.id > 0 && event.titulo)
   },
@@ -99,6 +107,7 @@ export const remate360Service = {
     incluirRacaNasInformacoes = false
   ): Promise<ImportSummary> {
     const data = await requestJson<Remate360EventsResponse>(REMATE360_EVENTS_URL)
+    ensureValidRemate360Response(data)
     const eventos = Array.isArray(data.eventos) ? data.eventos : []
     const selectedEvent = eventos.find((event) => Number(event.id ?? 0) === Number(eventId))
 
@@ -108,6 +117,42 @@ export const remate360Service = {
 
     const animais = Array.isArray(selectedEvent.animais) ? selectedEvent.animais : []
     return importAnimais(leilaoId, animais.map(toAnimalInput), { incluirRacaNasInformacoes })
+  },
+
+  async listEventsByUrl(url: string): Promise<Remate360EventOption[]> {
+    const data = await requestJson<Remate360EventsResponse>(url)
+    ensureValidRemate360Response(data)
+    const eventos = Array.isArray(data.eventos) ? data.eventos : []
+    return eventos.map(asEventOption).filter((event) => event.id > 0 && event.titulo)
+  },
+
+  async importEventByUrl(
+    leilaoId: string,
+    eventId: number,
+    incluirRacaNasInformacoes = false,
+    url: string
+  ): Promise<ImportSummary> {
+    const data = await requestJson<Remate360EventsResponse>(url)
+    ensureValidRemate360Response(data)
+    const eventos = Array.isArray(data.eventos) ? data.eventos : []
+    const selectedEvent = eventos.find((event) => Number(event.id ?? 0) === Number(eventId))
+
+    if (!selectedEvent) {
+      throw new Error('Evento do Remate360 não encontrado.')
+    }
+
+    const animais = Array.isArray(selectedEvent.animais) ? selectedEvent.animais : []
+    return importAnimais(leilaoId, animais.map(toAnimalInput), { incluirRacaNasInformacoes })
+  }
+}
+
+function ensureValidRemate360Response(data: Remate360EventsResponse) {
+  const error = String(data.error ?? '').trim()
+  const message = String(data.message ?? '').trim()
+  const hasEventos = Array.isArray(data.eventos)
+
+  if (!hasEventos && (error || message)) {
+    throw new Error(joinNonEmpty([error, message], ': '))
   }
 }
 

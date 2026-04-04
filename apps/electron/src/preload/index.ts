@@ -92,6 +92,18 @@ type OperacaoConexaoPayload = {
   ipsDisponiveis: string[]
 }
 
+type ApiImportProviderConfigPayload = {
+  id: string
+  nome: string
+  url: string
+}
+
+type ApiImportProviderPayload = {
+  id: string
+  nome: string
+  url: string
+}
+
 // Custom APIs for renderer
 const api = {}
 
@@ -143,6 +155,9 @@ if (process.contextIsolated) {
         srt: { ativo: boolean; porta: number | null }
       }) => ipcRenderer.invoke('config:abrirMonitorSrtExterno', vmix),
       pararMonitorSrtExterno: () => ipcRenderer.invoke('config:pararMonitorSrtExterno'),
+      getApiImportProviders: () => ipcRenderer.invoke('config:getApiImportProviders'),
+      setApiImportProviders: (providers: ApiImportProviderConfigPayload[]) =>
+        ipcRenderer.invoke('config:setApiImportProviders', providers),
       getLayoutAnimais: (leilaoId: string) => ipcRenderer.invoke('config:getLayoutAnimais', leilaoId),
       setLayoutAnimais: (
         leilaoId: string,
@@ -171,22 +186,20 @@ if (process.contextIsolated) {
 
     contextBridge.exposeInMainWorld('importacao', {
       excel: (leilaoId: string, incluirRacaNasInformacoes = false) =>
-        ipcRenderer.invoke('importacao:excel', leilaoId, incluirRacaNasInformacoes)
-    })
-
-    contextBridge.exposeInMainWorld('tbs', {
-      listarLeiloes: () => ipcRenderer.invoke('tbs:listarLeiloes'),
-      importarLeilao: (leilaoId: string, auctionId: number, incluirRacaNasInformacoes = false) =>
-        ipcRenderer.invoke('tbs:importarLeilao', leilaoId, auctionId, incluirRacaNasInformacoes)
-    })
-
-    contextBridge.exposeInMainWorld('remate360', {
-      listarEventos: () => ipcRenderer.invoke('remate360:listarEventos'),
-      importarEvento: (leilaoId: string, eventId: number, incluirRacaNasInformacoes = false) =>
+        ipcRenderer.invoke('importacao:excel', leilaoId, incluirRacaNasInformacoes),
+      listarLeiloesApi: (provider: ApiImportProviderPayload) =>
+        ipcRenderer.invoke('importacao:api:listarLeiloes', provider),
+      importarLeilaoApi: (
+        leilaoId: string,
+        provider: ApiImportProviderPayload,
+        auctionId: number,
+        incluirRacaNasInformacoes = false
+      ) =>
         ipcRenderer.invoke(
-          'remate360:importarEvento',
+          'importacao:api:importarLeilao',
           leilaoId,
-          eventId,
+          provider,
+          auctionId,
           incluirRacaNasInformacoes
         )
     })

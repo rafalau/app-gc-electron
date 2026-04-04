@@ -37,6 +37,11 @@ type StoreSchema = {
       totalDolar: string
     }
   >
+  apiImportProviders: Array<{
+    id: string
+    nome: string
+    url: string
+  }>
 }
 
 type ElectronStoreInstance = {
@@ -73,7 +78,39 @@ export async function getStore() {
         }
       },
       layoutAnimaisPorLeilao: {},
-      operacaoPorLeilao: {}
+      operacaoPorLeilao: {},
+      apiImportProviders: [
+        {
+          id: 'remate360',
+          nome: 'Remate360',
+          url: 'https://api-integrador.remate360.com.br/api/public/NnngF8tD8xIPVLQe1UK3fI0MHHqbKmdIZtgECOGiJR7IvFSHjSjWhbBm3yuaYpNH/eventos'
+        },
+        {
+          id: 'rpn-leiloes',
+          nome: 'RPN Leilões',
+          url: 'https://rpnleiloes.com.br/api/leiloes-ativos'
+        },
+        {
+          id: 'fom-leiloes',
+          nome: 'FOM Leilões',
+          url: 'https://fomleiloes.com.br/api/leiloes-ativos'
+        },
+        {
+          id: 'canal-business',
+          nome: 'Canal Business',
+          url: 'https://canalbusiness.com.br/api/leiloes-ativos'
+        },
+        {
+          id: 'agencia-tbs',
+          nome: 'Agência TBS',
+          url: 'https://agenciatbs.net.br/api/leiloes-ativos'
+        },
+        {
+          id: 'sprint-sales',
+          nome: 'Sprint Sales',
+          url: 'https://leilaosprintsales.com.br/api/leiloes-ativos'
+        }
+      ]
     }
   })
 

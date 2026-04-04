@@ -3,9 +3,10 @@ import { useRouter } from 'vue-router'
 import { CATEGORIAS_ANIMAL, type Animal, type AnimalCriarPayload } from '../types/animal'
 import type { Leilao } from '../types/leilao'
 import type {
+  ApiAuctionOption,
+  ApiImportProviderConfig,
+  ApiImportProviderOption,
   ImportSummary,
-  Remate360EventOption,
-  TbsAuctionOption
 } from '../types/importacao'
 import {
   atualizarAnimal,
@@ -16,16 +17,27 @@ import {
 } from '../services/animais.service'
 import {
   importarExcel,
-  importarEventoRemate360,
-  importarLeilaoTbs,
-  listarEventosRemate360,
-  listarLeiloesTbs
+  importarLeilaoApi,
+  listarLeiloesApi
 } from '../services/importacao.service'
 import { obterLeilao } from '../services/leiloes.service'
+import { obterApiImportProviders } from '../services/config.service'
 import { obterConexaoOperacao } from '../services/operacao.service'
 
 export type ModalAnimalModo = 'CRIAR' | 'EDITAR'
 export type LayoutInformacoesAnimais = 'AGREGADAS' | 'SEPARADAS'
+
+function toApiImportProviderOptions(providers: ApiImportProviderConfig[]): ApiImportProviderOption[] {
+  return providers.map((provider) => ({
+    id: provider.id,
+    nome: provider.nome,
+    url: provider.url
+  }))
+}
+
+function getPreferredApiImportProviderId(providers: ApiImportProviderOption[]) {
+  return providers[0]?.id ?? ''
+}
 
 function wait(ms: number) {
   return new Promise((resolve) => {
@@ -120,22 +132,29 @@ export function useAnimais(leilaoId: string) {
   const resumoAberto = ref(false)
   const limpandoTudo = ref(false)
   const excluindoAnimalId = ref<string | null>(null)
-  const tbsAberto = ref(false)
-  const tbsLoading = ref(false)
-  const tbsImportando = ref(false)
-  const tbsErro = ref('')
-  const tbsLeiloes = ref<TbsAuctionOption[]>([])
-  const tbsSelectedAuctionId = ref<number | null>(null)
-  const remate360Aberto = ref(false)
-  const remate360Loading = ref(false)
-  const remate360Importando = ref(false)
-  const remate360Erro = ref('')
-  const remate360Eventos = ref<Remate360EventOption[]>([])
-  const remate360SelectedEventId = ref<number | null>(null)
+  const apiImportAberto = ref(false)
+  const apiImportLoading = ref(false)
+  const apiImportImportando = ref(false)
+  const apiImportErro = ref('')
+  const apiImportLeiloes = ref<ApiAuctionOption[]>([])
+  const apiImportProviders = ref<ApiImportProviderOption[]>([])
+  const apiImportSelectedProviderId = ref<string>('')
+  const apiImportSelectedAuctionId = ref<number | null>(null)
+  const apiImportHasConfiguredProviders = computed(() => apiImportProviders.value.length > 0)
   const layoutInformacoesModo = ref<LayoutInformacoesAnimais>('AGREGADAS')
   const incluirRacaNasImportacoes = ref(false)
   let eventSource: EventSource | null = null
   let primeiroEventoSyncRecebido = false
+
+  async function carregarProvidersApi() {
+    const providers = await obterApiImportProviders()
+    apiImportProviders.value = toApiImportProviderOptions(providers)
+    apiImportSelectedProviderId.value = getPreferredApiImportProviderId(apiImportProviders.value)
+  }
+
+  function getApiImportProviderSelecionado() {
+    return apiImportProviders.value.find((provider) => provider.id === apiImportSelectedProviderId.value) ?? null
+  }
 
   function erroDeConexaoRemota(error: unknown) {
     const message = (error as Error)?.message ?? ''
@@ -245,99 +264,67 @@ export function useAnimais(leilaoId: string) {
     await carregar()
   }
 
-  async function abrirImportacaoTbs() {
-    tbsAberto.value = true
-    tbsErro.value = ''
-    tbsLoading.value = true
+  async function carregarLeiloesApi(provider: ApiImportProviderOption) {
+    apiImportErro.value = ''
+    apiImportLoading.value = true
 
     try {
-      tbsLeiloes.value = await listarLeiloesTbs()
-      if (!tbsSelectedAuctionId.value && tbsLeiloes.value.length > 0) {
-        tbsSelectedAuctionId.value = tbsLeiloes.value[0].id
-      }
+      apiImportLeiloes.value = await listarLeiloesApi(provider)
+      apiImportSelectedAuctionId.value = apiImportLeiloes.value[0]?.id ?? null
     } catch (error) {
-      tbsErro.value = (error as Error).message
+      apiImportErro.value = (error as Error).message
+      apiImportLeiloes.value = []
+      apiImportSelectedAuctionId.value = null
     } finally {
-      tbsLoading.value = false
+      apiImportLoading.value = false
     }
   }
 
-  function fecharImportacaoTbs() {
-    tbsAberto.value = false
+  async function abrirImportacaoApi() {
+    await carregarProvidersApi()
+    if (!getApiImportProviderSelecionado()) return
+    apiImportAberto.value = true
+    await carregarLeiloesApi(getApiImportProviderSelecionado()!)
   }
 
-  function selecionarLeilaoTbs(auctionId: number | null) {
-    tbsSelectedAuctionId.value = auctionId
+  function fecharImportacaoApi() {
+    apiImportAberto.value = false
   }
 
-  async function importarDaTbs() {
-    if (!tbsSelectedAuctionId.value) return
+  async function selecionarProviderApi(providerId: string) {
+    apiImportSelectedProviderId.value = providerId
+    const provider = getApiImportProviderSelecionado()
+    if (!provider) return
+    await carregarLeiloesApi(provider)
+  }
 
-    tbsImportando.value = true
-    tbsErro.value = ''
+  function selecionarLeilaoApi(auctionId: number | null) {
+    apiImportSelectedAuctionId.value = auctionId
+  }
+
+  async function importarDaApi() {
+    if (!apiImportSelectedAuctionId.value) return
+    const provider = getApiImportProviderSelecionado()
+    if (!provider) return
+
+    apiImportImportando.value = true
+    apiImportErro.value = ''
 
     try {
-      const resumo = await importarLeilaoTbs(
+      const resumo = await importarLeilaoApi(
         leilaoId,
-        tbsSelectedAuctionId.value,
+        provider,
+        apiImportSelectedAuctionId.value,
         incluirRacaNasImportacoes.value
       )
       resumoImportacao.value = resumo
       resumoAberto.value = true
-      tbsAberto.value = false
+      apiImportAberto.value = false
       await carregar()
     } catch (error) {
-      tbsErro.value = (error as Error).message
+      apiImportErro.value = (error as Error).message
     } finally {
-      tbsImportando.value = false
-    }
-  }
-
-  async function abrirImportacaoRemate360() {
-    remate360Aberto.value = true
-    remate360Erro.value = ''
-    remate360Loading.value = true
-
-    try {
-      remate360Eventos.value = await listarEventosRemate360()
-      if (!remate360SelectedEventId.value && remate360Eventos.value.length > 0) {
-        remate360SelectedEventId.value = remate360Eventos.value[0].id
-      }
-    } catch (error) {
-      remate360Erro.value = (error as Error).message
-    } finally {
-      remate360Loading.value = false
-    }
-  }
-
-  function fecharImportacaoRemate360() {
-    remate360Aberto.value = false
-  }
-
-  function selecionarEventoRemate360(eventId: number | null) {
-    remate360SelectedEventId.value = eventId
-  }
-
-  async function importarDoRemate360() {
-    if (!remate360SelectedEventId.value) return
-
-    remate360Importando.value = true
-    remate360Erro.value = ''
-
-    try {
-      const resumo = await importarEventoRemate360(
-        leilaoId,
-        remate360SelectedEventId.value,
-        incluirRacaNasImportacoes.value
-      )
-      resumoImportacao.value = resumo
-      resumoAberto.value = true
-      remate360Aberto.value = false
-      await carregar()
-    } catch (error) {
-      remate360Erro.value = (error as Error).message
-    } finally {
-      remate360Importando.value = false
+      apiImportImportando.value = false
     }
   }
 
@@ -424,6 +411,9 @@ export function useAnimais(leilaoId: string) {
   }
 
   onMounted(carregar)
+  onMounted(() => {
+    void carregarProvidersApi()
+  })
   onMounted(async () => {
     try {
       const conexao = await obterConexaoOperacao()
@@ -484,18 +474,16 @@ export function useAnimais(leilaoId: string) {
     resumoAberto,
     limpandoTudo,
     excluindoAnimalId,
-    tbsAberto,
-    tbsLoading,
-    tbsImportando,
-    tbsErro,
-    tbsLeiloes,
-    tbsSelectedAuctionId,
-    remate360Aberto,
-    remate360Loading,
-    remate360Importando,
-    remate360Erro,
-    remate360Eventos,
-    remate360SelectedEventId,
+    apiImportAberto,
+    apiImportLoading,
+    apiImportImportando,
+    apiImportErro,
+    apiImportLeiloes,
+    apiImportSelectedProviderId,
+    apiImportSelectedAuctionId,
+    apiImportProviders,
+    apiImportHasConfiguredProviders,
+    carregarProvidersApi,
     layoutInformacoesModo,
     incluirRacaNasImportacoes,
     abrirCriar,
@@ -503,14 +491,11 @@ export function useAnimais(leilaoId: string) {
     fecharModal,
     fecharResumo,
     importarPlanilhaExcel,
-    abrirImportacaoTbs,
-    fecharImportacaoTbs,
-    selecionarLeilaoTbs,
-    importarDaTbs,
-    abrirImportacaoRemate360,
-    fecharImportacaoRemate360,
-    selecionarEventoRemate360,
-    importarDoRemate360,
+    abrirImportacaoApi,
+    fecharImportacaoApi,
+    selecionarProviderApi,
+    selecionarLeilaoApi,
+    importarDaApi,
     salvarConfiguracaoLayout,
     salvarModal,
     excluir,

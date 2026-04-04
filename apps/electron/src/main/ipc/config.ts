@@ -37,6 +37,12 @@ type ModoConfigIpc = {
   portaApp: number
 }
 
+type ApiImportProviderConfigIpc = {
+  id: string
+  nome: string
+  url: string
+}
+
 function getAppModeOverride(): 'HOST' | 'REMOTO' | null {
   if (__APP_MODE__ === 'HOST' || __APP_MODE__ === 'REMOTO') {
     return __APP_MODE__
@@ -76,6 +82,20 @@ function normalizarModoConfig(
     hostIp: String(config?.hostIp ?? fallback?.hostIp ?? '').trim(),
     portaApp: Number.isInteger(portaBase) && portaBase > 0 ? portaBase : 18452
   }
+}
+
+function normalizarApiImportProviderConfig(
+  providers?: Partial<ApiImportProviderConfigIpc>[] | null
+): ApiImportProviderConfigIpc[] {
+  return (Array.isArray(providers) ? providers : [])
+    .map((provider, index) => ({
+      id: String(provider?.id ?? `api-${index + 1}`)
+        .trim()
+        .toLowerCase(),
+      nome: String(provider?.nome ?? '').trim(),
+      url: String(provider?.url ?? '').trim()
+    }))
+    .filter((provider) => provider.nome && provider.url)
 }
 
 function aplicarDefaultsDeModo(
@@ -660,6 +680,37 @@ export function registrarIpcConfig() {
     pararMonitorSrtExterno()
     return { ok: true }
   })
+
+  ipcMain.handle('config:getApiImportProviders', async () => {
+    const conexao = await getModoConexaoOperacao()
+    if (conexao.modo === 'REMOTO') {
+      return fetchRemotoJson(`${conexao.baseUrl}/sync/config/api-providers`)
+    }
+
+    const store = await getStore()
+    return normalizarApiImportProviderConfig(store.get('apiImportProviders'))
+  })
+
+  ipcMain.handle(
+    'config:setApiImportProviders',
+    async (_evt, providers: Partial<ApiImportProviderConfigIpc>[] | null) => {
+      const providersNormalizados = normalizarApiImportProviderConfig(providers)
+      const conexao = await getModoConexaoOperacao()
+      if (conexao.modo === 'REMOTO') {
+        await fetchRemotoJson(`${conexao.baseUrl}/sync/config/api-providers`, {
+          method: 'PUT',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify(providersNormalizados)
+        })
+        return
+      }
+
+      const store = await getStore()
+      store.set('apiImportProviders', providersNormalizados)
+    }
+  )
 
   ipcMain.handle('config:getLayoutAnimais', async (_evt, leilaoId: string) => {
     const conexao = await getModoConexaoOperacao()

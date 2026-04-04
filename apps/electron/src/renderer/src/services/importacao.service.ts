@@ -1,9 +1,9 @@
 import type {
+  ApiAuctionOption,
+  ApiImportProviderOption,
   ImportSummary,
-  Remate360EventOption,
   StudbookImportPayload,
-  StudbookSearchResult,
-  TbsAuctionOption
+  StudbookSearchResult
 } from '../types/importacao'
 
 export async function importarExcel(
@@ -13,28 +13,30 @@ export async function importarExcel(
   return window.importacao.excel(leilaoId, incluirRacaNasInformacoes)
 }
 
-export async function listarLeiloesTbs(): Promise<TbsAuctionOption[]> {
-  return window.tbs.listarLeiloes()
+export async function listarLeiloesApi(provider: ApiImportProviderOption): Promise<ApiAuctionOption[]> {
+  return window.importacao.listarLeiloesApi({
+    id: String(provider.id),
+    nome: String(provider.nome),
+    url: String(provider.url)
+  })
 }
 
-export async function importarLeilaoTbs(
+export async function importarLeilaoApi(
   leilaoId: string,
+  provider: ApiImportProviderOption,
   auctionId: number,
   incluirRacaNasInformacoes = false
 ): Promise<ImportSummary> {
-  return window.tbs.importarLeilao(leilaoId, auctionId, incluirRacaNasInformacoes)
-}
-
-export async function listarEventosRemate360(): Promise<Remate360EventOption[]> {
-  return window.remate360.listarEventos()
-}
-
-export async function importarEventoRemate360(
-  leilaoId: string,
-  eventId: number,
-  incluirRacaNasInformacoes = false
-): Promise<ImportSummary> {
-  return window.remate360.importarEvento(leilaoId, eventId, incluirRacaNasInformacoes)
+  return window.importacao.importarLeilaoApi(
+    leilaoId,
+    {
+      id: String(provider.id),
+      nome: String(provider.nome),
+      url: String(provider.url)
+    },
+    auctionId,
+    incluirRacaNasInformacoes
+  )
 }
 
 export async function buscarStudbook(term: string): Promise<StudbookSearchResult[]> {

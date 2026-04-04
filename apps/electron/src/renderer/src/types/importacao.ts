@@ -7,19 +7,23 @@ export type ImportSummary = {
   errors: string[]
 }
 
-export type TbsAuctionOption = {
+export type ApiAuctionOption = {
   id: number
   titulo: string
   dataHora: string
   totalAnimais: number
 }
 
-export type Remate360EventOption = {
-  id: number
-  titulo: string
-  dataHora: string
-  totalAnimais: number
+export type TbsAuctionOption = ApiAuctionOption
+export type Remate360EventOption = ApiAuctionOption
+
+export type ApiImportProviderConfig = {
+  id: string
+  nome: string
+  url: string
 }
+
+export type ApiImportProviderOption = ApiImportProviderConfig
 
 export type StudbookSearchResult = {
   nome: string

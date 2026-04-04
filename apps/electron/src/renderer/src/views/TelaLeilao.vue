@@ -7,12 +7,16 @@ import BaseModal from '@renderer/components/ui/BaseModal.vue'
 import AnimalTabela from '@renderer/components/animal/AnimalTabela.vue'
 import AnimalModal from '@renderer/components/animal/AnimalModal.vue'
 import ConferenciaAnimaisModal from '@renderer/components/animal/ConferenciaAnimaisModal.vue'
-import TbsImportModal from '@renderer/components/animal/TbsImportModal.vue'
-import Remate360ImportModal from '@renderer/components/animal/Remate360ImportModal.vue'
+import ApiImportModal from '@renderer/components/animal/ApiImportModal.vue'
 import ImportSummaryModal from '@renderer/components/animal/ImportSummaryModal.vue'
 import { useAnimais } from '@renderer/composables/useAnimais'
-import { obterModoConfig } from '@renderer/services/config.service'
+import {
+  obterApiImportProviders,
+  obterModoConfig,
+  salvarApiImportProviders
+} from '@renderer/services/config.service'
 import type { Animal } from '@renderer/types/animal'
+import type { ApiImportProviderConfig } from '@renderer/types/importacao'
 import { applyUppercaseInput } from '@renderer/utils/uppercaseInput'
 
 type DropdownItem = {
@@ -39,18 +43,15 @@ const {
   resumoAberto,
   limpandoTudo,
   excluindoAnimalId,
-  tbsAberto,
-  tbsLoading,
-  tbsImportando,
-  tbsErro,
-  tbsLeiloes,
-  tbsSelectedAuctionId,
-  remate360Aberto,
-  remate360Loading,
-  remate360Importando,
-  remate360Erro,
-  remate360Eventos,
-  remate360SelectedEventId,
+  apiImportAberto,
+  apiImportLoading,
+  apiImportImportando,
+  apiImportErro,
+  apiImportLeiloes,
+  apiImportSelectedProviderId,
+  apiImportSelectedAuctionId,
+  apiImportProviders,
+  apiImportHasConfiguredProviders,
   layoutInformacoesModo,
   incluirRacaNasImportacoes,
   abrirCriar,
@@ -58,14 +59,12 @@ const {
   fecharModal,
   fecharResumo,
   importarPlanilhaExcel,
-  abrirImportacaoTbs,
-  fecharImportacaoTbs,
-  selecionarLeilaoTbs,
-  importarDaTbs,
-  abrirImportacaoRemate360,
-  fecharImportacaoRemate360,
-  selecionarEventoRemate360,
-  importarDoRemate360,
+  abrirImportacaoApi,
+  fecharImportacaoApi,
+  selecionarProviderApi,
+  selecionarLeilaoApi,
+  importarDaApi,
+  carregarProvidersApi,
   salvarConfiguracaoLayout,
   salvarModal,
   excluir,
@@ -80,6 +79,7 @@ const confirmacaoLimpar = ref('')
 const layoutModoDraft = ref<'AGREGADAS' | 'SEPARADAS'>('AGREGADAS')
 const incluirRacaDraft = ref(false)
 const modoAtual = ref<'HOST' | 'REMOTO' | null>(null)
+const apiProvidersDraft = ref<ApiImportProviderConfig[]>([])
 const importItems = computed(() => {
   const items: DropdownItem[] = []
 
@@ -93,22 +93,15 @@ const importItems = computed(() => {
     })
   }
 
-  items.push(
-    {
-      label: 'Importar TBS',
+  if (apiImportHasConfiguredProviders.value) {
+    items.push({
+      label: 'Importar API',
       icon: 'fa-cloud-download-alt',
       action: () => {
-        void abrirImportacaoTbs()
+        void abrirImportacaoApi()
       }
-    },
-    {
-      label: 'Importar do Remate360',
-      icon: 'fa-cloud-download-alt',
-      action: () => {
-        void abrirImportacaoRemate360()
-      }
-    }
-  )
+    })
+  }
 
   return items
 })
@@ -198,7 +191,10 @@ function fecharConferencia() {
 function abrirConfiguracoes() {
   layoutModoDraft.value = layoutInformacoesModo.value
   incluirRacaDraft.value = incluirRacaNasImportacoes.value
-  configuracoesAbertas.value = true
+  void (async () => {
+    apiProvidersDraft.value = await obterApiImportProviders()
+    configuracoesAbertas.value = true
+  })()
 }
 
 function fecharConfiguracoes() {
@@ -206,8 +202,41 @@ function fecharConfiguracoes() {
 }
 
 async function salvarConfiguracoes() {
+  await salvarApiImportProviders(apiProvidersDraft.value)
   await salvarConfiguracaoLayout(layoutModoDraft.value, incluirRacaDraft.value)
+  await carregarProvidersApi()
   configuracoesAbertas.value = false
+}
+
+function adicionarApiProvider() {
+  apiProvidersDraft.value = [
+    ...apiProvidersDraft.value,
+    {
+      id: `api-${Date.now()}`,
+      nome: '',
+      url: ''
+    }
+  ]
+}
+
+function atualizarApiProvider(index: number, campo: 'nome' | 'url', valor: string) {
+  apiProvidersDraft.value = apiProvidersDraft.value.map((provider, providerIndex) =>
+    providerIndex === index ? { ...provider, [campo]: valor } : provider
+  )
+}
+
+function removerApiProvider(index: number) {
+  apiProvidersDraft.value = apiProvidersDraft.value.filter((_, providerIndex) => providerIndex !== index)
+}
+
+function moverApiProvider(index: number, direction: 'up' | 'down') {
+  const targetIndex = direction === 'up' ? index - 1 : index + 1
+  if (targetIndex < 0 || targetIndex >= apiProvidersDraft.value.length) return
+
+  const next = [...apiProvidersDraft.value]
+  const [item] = next.splice(index, 1)
+  next.splice(targetIndex, 0, item)
+  apiProvidersDraft.value = next
 }
 
 function abrirModoOperacao(animal?: Animal) {
@@ -318,28 +347,19 @@ onMounted(async () => {
       @salvar="salvarModal"
     />
 
-    <TbsImportModal
-      :aberto="tbsAberto"
-      :leiloes="tbsLeiloes"
-      :loading="tbsLoading"
-      :importing="tbsImportando"
-      :selected-auction-id="tbsSelectedAuctionId"
-      :erro="tbsErro"
-      @fechar="fecharImportacaoTbs"
-      @select="selecionarLeilaoTbs"
-      @importar="importarDaTbs"
-    />
-
-    <Remate360ImportModal
-      :aberto="remate360Aberto"
-      :eventos="remate360Eventos"
-      :loading="remate360Loading"
-      :importing="remate360Importando"
-      :selected-event-id="remate360SelectedEventId"
-      :erro="remate360Erro"
-      @fechar="fecharImportacaoRemate360"
-      @select="selecionarEventoRemate360"
-      @importar="importarDoRemate360"
+    <ApiImportModal
+      :aberto="apiImportAberto"
+      :providers="apiImportProviders"
+      :provider-id="apiImportSelectedProviderId"
+      :leiloes="apiImportLeiloes"
+      :loading="apiImportLoading"
+      :importing="apiImportImportando"
+      :selected-auction-id="apiImportSelectedAuctionId"
+      :erro="apiImportErro"
+      @fechar="fecharImportacaoApi"
+      @select-provider="selecionarProviderApi"
+      @select-auction="selecionarLeilaoApi"
+      @importar="importarDaApi"
     />
 
     <ImportSummaryModal :aberto="resumoAberto" :resumo="resumoImportacao" @fechar="fecharResumo" />
@@ -395,6 +415,95 @@ onMounted(async () => {
               </div>
             </div>
           </label>
+        </div>
+
+        <div class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+          <div class="flex items-center justify-between gap-4">
+            <div>
+              <div class="text-sm font-semibold text-slate-900">APIs no padrão TBS</div>
+              <div class="mt-1 text-[11px] leading-4 text-slate-500">
+                Cadastre e ordene as APIs do menu <span class="font-semibold">Importar API</span>.
+              </div>
+            </div>
+
+            <BaseButton variante="secundario" class="shrink-0" @click="adicionarApiProvider">
+              <i class="fas fa-plus mr-1" />
+              Nova API
+            </BaseButton>
+          </div>
+
+          <div class="mt-4 space-y-3">
+            <div
+              v-for="(provider, index) in apiProvidersDraft"
+              :key="provider.id"
+              class="rounded-2xl border border-slate-200 bg-white p-4"
+            >
+              <div class="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_auto]">
+                <div>
+                  <label class="mb-2 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+                    Nome
+                  </label>
+                  <input
+                    :value="provider.nome"
+                    type="text"
+                    class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100"
+                    @input="
+                      atualizarApiProvider(
+                        index,
+                        'nome',
+                        ($event.target as HTMLInputElement).value
+                      )
+                    "
+                  />
+                </div>
+
+                <div>
+                  <label class="mb-2 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+                    URL
+                  </label>
+                  <input
+                    :value="provider.url"
+                    type="text"
+                    class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100"
+                    @input="
+                      atualizarApiProvider(
+                        index,
+                        'url',
+                        ($event.target as HTMLInputElement).value
+                      )
+                    "
+                  />
+                </div>
+
+                <div class="flex items-end gap-2">
+                  <BaseButton
+                    variante="secundario"
+                    :disabled="index === 0"
+                    @click="moverApiProvider(index, 'up')"
+                  >
+                    ↑
+                  </BaseButton>
+                  <BaseButton
+                    variante="secundario"
+                    :disabled="index === apiProvidersDraft.length - 1"
+                    @click="moverApiProvider(index, 'down')"
+                  >
+                    ↓
+                  </BaseButton>
+                  <BaseButton variante="perigo" @click="removerApiProvider(index)">
+                    Apagar
+                  </BaseButton>
+                </div>
+              </div>
+            </div>
+
+            <div
+              v-if="apiProvidersDraft.length === 0"
+              class="rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-6 text-sm text-slate-500"
+            >
+              Nenhuma API cadastrada.
+            </div>
+          </div>
         </div>
       </div>
 

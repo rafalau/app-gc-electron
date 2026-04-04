@@ -1,4 +1,5 @@
 import type { ModoConfig, SrtPreviewStatus, VmixConfig, VmixInput } from '../types/config'
+import type { ApiImportProviderConfig } from '../types/importacao'
 
 function normalizarInput(input: VmixInput | null): VmixInput | null {
   if (!input) return null
@@ -67,4 +68,18 @@ export async function abrirMonitorSrtExterno(config: VmixConfig): Promise<{ ok: 
 
 export async function pararMonitorSrtExterno(): Promise<{ ok: boolean }> {
   return window.config.pararMonitorSrtExterno()
+}
+
+export async function obterApiImportProviders(): Promise<ApiImportProviderConfig[]> {
+  return window.config.getApiImportProviders()
+}
+
+export async function salvarApiImportProviders(providers: ApiImportProviderConfig[]): Promise<void> {
+  await window.config.setApiImportProviders(
+    providers.map((provider) => ({
+      id: String(provider.id ?? ''),
+      nome: String(provider.nome ?? ''),
+      url: String(provider.url ?? '')
+    }))
+  )
 }

@@ -6,6 +6,7 @@ import { registrarIpcLeiloes } from './ipc/leiloes'
 import { registrarIpcConfig } from './ipc/config'
 import { registrarIpcAnimais } from './ipc/animais'
 import { registrarIpcImportacoes } from './ipc/importacoes'
+import { registrarIpcApiImport } from './ipc/apiImport'
 import { registrarIpcTbs } from './ipc/tbs'
 import { registrarIpcRemate360 } from './ipc/remate360'
 import { registrarIpcStudbook } from './ipc/studbook'
@@ -144,6 +145,7 @@ app
     registrarIpcLeiloes()
     registrarIpcAnimais()
     registrarIpcImportacoes()
+    registrarIpcApiImport()
     registrarIpcTbs()
     registrarIpcRemate360()
     registrarIpcStudbook()

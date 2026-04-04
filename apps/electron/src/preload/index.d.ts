@@ -81,12 +81,8 @@ export type TbsAuctionOption = {
   totalAnimais: number
 }
 
-export type Remate360EventOption = {
-  id: number
-  titulo: string
-  dataHora: string
-  totalAnimais: number
-}
+export type ApiAuctionOption = TbsAuctionOption
+export type Remate360EventOption = ApiAuctionOption
 
 export type StudbookSearchResult = {
   nome: string
@@ -102,6 +98,18 @@ export type StudbookImportPayload = {
 export type LayoutAnimaisConfig = {
   modo: 'AGREGADAS' | 'SEPARADAS'
   incluirRacaNasImportacoes: boolean
+}
+
+export type ApiImportProviderConfig = {
+  id: string
+  nome: string
+  url: string
+}
+
+export type ApiImportProvider = {
+  id: string
+  nome: string
+  url: string
 }
 
 export type VmixConfig = {
@@ -189,6 +197,8 @@ declare global {
       getStatusPreviewSrt: () => Promise<SrtPreviewStatus>
       abrirMonitorSrtExterno: (vmix: VmixConfig) => Promise<{ ok: boolean }>
       pararMonitorSrtExterno: () => Promise<{ ok: boolean }>
+      getApiImportProviders: () => Promise<ApiImportProviderConfig[]>
+      setApiImportProviders: (providers: ApiImportProviderConfig[]) => Promise<void>
       getLayoutAnimais: (leilaoId: string) => Promise<LayoutAnimaisConfig>
       setLayoutAnimais: (leilaoId: string, layout: LayoutAnimaisConfig) => Promise<void>
     }
@@ -209,20 +219,11 @@ declare global {
     }
     importacao: {
       excel: (leilaoId: string, incluirRacaNasInformacoes?: boolean) => Promise<ImportSummary | null>
-    }
-    tbs: {
-      listarLeiloes: () => Promise<TbsAuctionOption[]>
-      importarLeilao: (
+      listarLeiloesApi: (provider: ApiImportProvider) => Promise<ApiAuctionOption[]>
+      importarLeilaoApi: (
         leilaoId: string,
+        provider: ApiImportProvider,
         auctionId: number,
-        incluirRacaNasInformacoes?: boolean
-      ) => Promise<ImportSummary>
-    }
-    remate360: {
-      listarEventos: () => Promise<Remate360EventOption[]>
-      importarEvento: (
-        leilaoId: string,
-        eventId: number,
         incluirRacaNasInformacoes?: boolean
       ) => Promise<ImportSummary>
     }

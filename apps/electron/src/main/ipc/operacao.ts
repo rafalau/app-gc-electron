@@ -19,7 +19,8 @@ import {
   removerAnimaisPorLeilaoLocal
 } from './animais'
 import { tbsService } from '../services/tbs.service'
-import { remate360Service } from '../services/remate360.service'
+import { isRemate360Url, remate360Service } from '../services/remate360.service'
+import type { ApiImportProvider } from './apiImport'
 
 type ModoOperacao = 'HOST' | 'REMOTO' | null
 
@@ -456,10 +457,13 @@ export async function ensureOperacaoServer() {
     const matchAnimal = url.match(/^\/sync\/animal\/([^/]+)$/)
     const matchAnimaisLimpar = url.match(/^\/sync\/animais-leilao\/([^/]+)$/)
     const matchLayout = url.match(/^\/sync\/layout\/([^/]+)$/)
+    const matchConfigApiProviders = url.match(/^\/sync\/config\/api-providers$/)
     const matchTbsLeiloes = url.match(/^\/sync\/tbs\/leiloes$/)
     const matchTbsImportar = url.match(/^\/sync\/tbs\/importar$/)
     const matchRemateEventos = url.match(/^\/sync\/remate360\/eventos$/)
     const matchRemateImportar = url.match(/^\/sync\/remate360\/importar$/)
+    const matchApiLeiloes = url.match(/^\/sync\/importacao\/api\/leiloes$/)
+    const matchApiImportar = url.match(/^\/sync\/importacao\/api\/importar$/)
 
     if (req.method === 'OPTIONS') {
       res.writeHead(204, {
@@ -679,6 +683,20 @@ export async function ensureOperacaoServer() {
         return
       }
 
+      if (matchConfigApiProviders && req.method === 'GET') {
+        const store = await getStore()
+        responderJson(res, 200, store.get('apiImportProviders') ?? [])
+        return
+      }
+
+      if (matchConfigApiProviders && req.method === 'PUT') {
+        const payload = await lerCorpoJson(req)
+        const store = await getStore()
+        store.set('apiImportProviders', Array.isArray(payload) ? payload : [])
+        responderJson(res, 200, { ok: true })
+        return
+      }
+
       if (matchTbsLeiloes && req.method === 'GET') {
         responderJson(res, 200, await tbsService.listActiveAuctions())
         return
@@ -717,6 +735,46 @@ export async function ensureOperacaoServer() {
           payload.eventId,
           Boolean(payload.incluirRacaNasInformacoes)
         )
+        publicarSyncEvento('leiloes')
+        publicarSyncEvento(`animais:${payload.leilaoId}`)
+        responderJson(res, 200, resumo)
+        return
+      }
+
+      if (matchApiLeiloes && req.method === 'POST') {
+        const payload = (await lerCorpoJson(req)) as { provider: ApiImportProvider }
+        const provider = payload.provider
+
+        if (isRemate360Url(provider.url)) {
+          responderJson(res, 200, await remate360Service.listEventsByUrl(provider.url))
+          return
+        }
+
+        responderJson(res, 200, await tbsService.listActiveAuctionsByUrl(provider.url))
+        return
+      }
+
+      if (matchApiImportar && req.method === 'POST') {
+        const payload = (await lerCorpoJson(req)) as {
+          leilaoId: string
+          provider: ApiImportProvider
+          auctionId: number
+          incluirRacaNasInformacoes?: boolean
+        }
+        const resumo =
+          isRemate360Url(payload.provider.url)
+            ? await remate360Service.importEventByUrl(
+                payload.leilaoId,
+                payload.auctionId,
+                Boolean(payload.incluirRacaNasInformacoes),
+                payload.provider.url
+              )
+            : await tbsService.importAuctionByUrl(
+                payload.leilaoId,
+                payload.auctionId,
+                Boolean(payload.incluirRacaNasInformacoes),
+                payload.provider.url
+              )
         publicarSyncEvento('leiloes')
         publicarSyncEvento(`animais:${payload.leilaoId}`)
         responderJson(res, 200, resumo)
