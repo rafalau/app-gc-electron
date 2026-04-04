@@ -23,14 +23,14 @@ async function carregarJanelaEdicaoRapida(win: BrowserWindow, leilaoId: string, 
     return
   }
 
-  await win.loadFile(join(__dirname, '../../renderer/index.html'), {
+  await win.loadFile(join(__dirname, '../renderer/index.html'), {
     query: Object.fromEntries(query.entries())
   })
 }
 
 function aplicarPreset(win: BrowserWindow, preset: JanelaPreset) {
   if (preset === 'OPERACAO') {
-    win.setMinimumSize(550, 720)
+    win.setMinimumSize(380, 720)
     win.setSize(550, Math.max(win.getSize()[1], 820), true)
     win.center()
     return

@@ -1,10 +1,12 @@
-import { ipcMain } from 'electron'
+import { app, ipcMain } from 'electron'
 import {
   createServer as createHttpServer,
   type Server as HttpServer,
   type ServerResponse
 } from 'node:http'
 import { spawn, type ChildProcess } from 'node:child_process'
+import { existsSync } from 'node:fs'
+import { join } from 'node:path'
 import { getStore } from '../store/store'
 import {
   ensureOperacaoServer,
@@ -151,6 +153,31 @@ let srtPreviewHttpServer: HttpServer | null = null
 let srtPreviewHttpPort: number | null = null
 let srtPreviewFrameAtual: Buffer | null = null
 const srtPreviewClientes = new Set<ServerResponse>()
+
+function getResourceRoot() {
+  if (!app.isPackaged) {
+    return join(app.getAppPath(), 'resources')
+  }
+
+  const candidates = [
+    join(process.resourcesPath, 'app.asar.unpacked', 'resources'),
+    join(process.resourcesPath, 'resources'),
+    process.resourcesPath
+  ]
+
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) {
+      return candidate
+    }
+  }
+
+  return candidates[0]
+}
+
+function getBundledExecutable(name: 'ffmpeg.exe') {
+  const bundled = join(getResourceRoot(), 'runtime', 'ffmpeg', 'win32', name)
+  return existsSync(bundled) ? bundled : name
+}
 
 function montarEndpointSrt(vmix: VmixConfigIpc) {
   return `srt://${vmix.ip}:${vmix.srt.porta}?timeout=5000000`
@@ -362,7 +389,7 @@ async function iniciarPreviewSrt(config: Partial<VmixConfigIpc>) {
     'pipe:1'
   ]
 
-  const ffmpeg = spawn('ffmpeg', args, {
+  const ffmpeg = spawn(getBundledExecutable('ffmpeg.exe'), args, {
     stdio: ['ignore', 'pipe', 'pipe']
   })
 

@@ -1,7 +1,7 @@
 {
   "name": "app-gc-electron",
   "version": "1.0.0",
-  "description": "",
+  "description": "APP GC Vmix para operação de leilões com integração vMix",
   "private": true,
   "main": "index.js",
   "workspaces": [
@@ -21,7 +21,7 @@
     "prisma:migrate:deploy": "cross-env DATABASE_URL=file:./apps/electron/prisma/dev.db prisma migrate deploy --schema apps/electron/prisma/schema.prisma"
   },
   "keywords": [],
-  "author": "",
+  "author": "Rafael Lauriano <rafas.lau@gmail.com>",
   "license": "ISC",
   "type": "commonjs",
   "dependencies": {
@@ -35,6 +35,7 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
+    "@rollup/rollup-win32-x64-msvc": "^4.59.0",
     "cross-env": "^10.1.0",
     "prisma": "^7.6.0"
   }

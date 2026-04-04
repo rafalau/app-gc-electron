@@ -1,17 +1,26 @@
 import { app } from 'electron'
+import Database from 'better-sqlite3'
+import { existsSync, mkdirSync, readFileSync, readdirSync } from 'fs'
 import { spawn } from 'child_process'
+import { createHash, randomUUID } from 'crypto'
 import { join, resolve } from 'path'
-import { existsSync } from 'fs'
 
 function fileSqliteUrl(absolutePath: string) {
   const normalized = absolutePath.replace(/\\/g, '/')
+  if (/^[A-Za-z]:\//.test(normalized)) {
+    return `file:${normalized}`
+  }
   return `file:${normalized.startsWith('/') ? '' : '/'}${normalized}`
 }
 
-export function getRuntimeDatabaseUrl() {
+function getRuntimeDatabasePath() {
   const userData = app.getPath('userData')
-  const dbPath = join(userData, 'gc.sqlite')
-  return fileSqliteUrl(dbPath)
+  mkdirSync(userData, { recursive: true })
+  return join(userData, 'gc.sqlite')
+}
+
+export function getRuntimeDatabaseUrl() {
+  return fileSqliteUrl(getRuntimeDatabasePath())
 }
 
 function getProjectRoot() {
@@ -30,16 +39,20 @@ function getProjectRoot() {
 
 function getSchemaPath() {
   const projectRoot = getProjectRoot()
-
-  // 1) DEV: a partir do código compilado em apps/electron/out/main
-  // __dirname aqui vira .../apps/electron/out/main
   const devPath = resolve(__dirname, '../../prisma/schema.prisma')
-
-  // 2) Fallback: quando rodar a partir do repo (alguns setups)
   const cwdPath = resolve(projectRoot, 'apps/electron/prisma/schema.prisma')
-
-  // 3) (futuro) PROD empacotado: vamos ajustar quando empacotar
   const prodPath = resolve(app.getAppPath(), 'prisma/schema.prisma')
+
+  if (existsSync(devPath)) return devPath
+  if (existsSync(cwdPath)) return cwdPath
+  return prodPath
+}
+
+function getMigrationsPath() {
+  const projectRoot = getProjectRoot()
+  const devPath = resolve(__dirname, '../../prisma/migrations')
+  const cwdPath = resolve(projectRoot, 'apps/electron/prisma/migrations')
+  const prodPath = resolve(app.getAppPath(), 'prisma/migrations')
 
   if (existsSync(devPath)) return devPath
   if (existsSync(cwdPath)) return cwdPath
@@ -57,27 +70,32 @@ function getConfigPath() {
 
 function getPrismaCommand() {
   const projectRoot = getProjectRoot()
-  const binaryName = process.platform === 'win32' ? 'prisma.cmd' : 'prisma'
-  const localBinary = resolve(projectRoot, 'node_modules', '.bin', binaryName)
+  const prismaScript = resolve(projectRoot, 'node_modules', 'prisma', 'build', 'index.js')
+  const nodeExecutable =
+    process.env.npm_node_execpath ||
+    process.env.NODE ||
+    (process.platform === 'win32' ? 'node.exe' : 'node')
 
-  if (existsSync(localBinary)) {
+  if (existsSync(prismaScript)) {
     return {
-      cmd: localBinary,
+      cmd: nodeExecutable,
+      args: [prismaScript],
       cwd: projectRoot
     }
   }
 
   return {
     cmd: process.platform === 'win32' ? 'npx.cmd' : 'npx',
+    args: ['prisma'],
     cwd: projectRoot
   }
 }
 
-export async function migrateDeploy() {
+async function migrateDeployWithCli() {
   const databaseUrl = getRuntimeDatabaseUrl()
   const schemaPath = getSchemaPath()
   const configPath = getConfigPath()
-  const { cmd, cwd } = getPrismaCommand()
+  const { cmd, args, cwd } = getPrismaCommand()
 
   const env = {
     ...process.env,
@@ -85,14 +103,19 @@ export async function migrateDeploy() {
   }
 
   await new Promise<void>((resolvePromise, reject) => {
-    const args = cmd.includes('node_modules')
-      ? ['migrate', 'deploy', '--schema', schemaPath, '--config', configPath]
-      : ['prisma', 'migrate', 'deploy', '--schema', schemaPath, '--config', configPath]
+    const baseArgs = [...args, 'migrate', 'deploy', '--schema', schemaPath, '--config', configPath]
 
-    const child = spawn(cmd, args, {
-      cwd,
-      env
-    })
+    const child =
+      process.platform === 'win32' && cmd.toLowerCase().endsWith('.cmd')
+        ? spawn(cmd, baseArgs, {
+            cwd,
+            env,
+            shell: true
+          })
+        : spawn(cmd, baseArgs, {
+            cwd,
+            env
+          })
 
     let stdout = ''
     let stderr = ''
@@ -112,3 +135,123 @@ export async function migrateDeploy() {
     })
   })
 }
+
+function ensureMigrationsTable(db: Database.Database) {
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS "_prisma_migrations" (
+      "id" TEXT NOT NULL PRIMARY KEY,
+      "checksum" TEXT NOT NULL,
+      "finished_at" DATETIME,
+      "migration_name" TEXT NOT NULL,
+      "logs" TEXT,
+      "rolled_back_at" DATETIME,
+      "started_at" DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      "applied_steps_count" INTEGER NOT NULL DEFAULT 0
+    );
+  `)
+}
+
+function migrateDeployPackaged() {
+  const dbPath = getRuntimeDatabasePath()
+  const migrationsPath = getMigrationsPath()
+
+  const db = new Database(dbPath)
+
+  try {
+    ensureMigrationsTable(db)
+
+    const migrationDirs = readdirSync(migrationsPath, { withFileTypes: true })
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => entry.name)
+      .sort()
+
+    for (const migrationName of migrationDirs) {
+      const alreadyApplied = db
+        .prepare(
+          `
+            SELECT 1
+            FROM "_prisma_migrations"
+            WHERE "migration_name" = ?
+              AND "finished_at" IS NOT NULL
+              AND "rolled_back_at" IS NULL
+            LIMIT 1
+          `
+        )
+        .get(migrationName)
+
+      if (alreadyApplied) continue
+
+      const migrationPath = join(migrationsPath, migrationName, 'migration.sql')
+      const sql = readFileSync(migrationPath, 'utf8')
+      const checksum = createHash('sha256').update(sql).digest('hex')
+      const startedAt = new Date().toISOString()
+      const id = randomUUID()
+
+      try {
+        db.exec('BEGIN')
+        db.exec(sql)
+        db.prepare(
+          `
+            INSERT INTO "_prisma_migrations" (
+              "id",
+              "checksum",
+              "finished_at",
+              "migration_name",
+              "logs",
+              "rolled_back_at",
+              "started_at",
+              "applied_steps_count"
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          `
+        ).run(id, checksum, new Date().toISOString(), migrationName, '', null, startedAt, 1)
+        db.exec('COMMIT')
+      } catch (error) {
+        db.exec('ROLLBACK')
+        db.prepare(
+          `
+            INSERT INTO "_prisma_migrations" (
+              "id",
+              "checksum",
+              "finished_at",
+              "migration_name",
+              "logs",
+              "rolled_back_at",
+              "started_at",
+              "applied_steps_count"
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+          `
+        ).run(
+          id,
+          checksum,
+          null,
+          migrationName,
+          error instanceof Error ? error.stack ?? error.message : String(error),
+          null,
+          startedAt,
+          0
+        )
+        throw error
+      }
+    }
+  } finally {
+    db.close()
+  }
+}
+
+export async function migrateDeploy() {
+  if (app.isPackaged) {
+    migrateDeployPackaged()
+    return
+  }
+
+  try {
+    await migrateDeployWithCli()
+  } catch (error) {
+    console.warn(
+      '[migrate] prisma CLI falhou no dev; aplicando migrations locais por SQL.',
+      error
+    )
+    migrateDeployPackaged()
+  }
+}
+

@@ -14,6 +14,32 @@ import { registrarIpcJanela } from './ipc/janela'
 import { registrarIpcSrtPlayer } from './ipc/srtPlayer'
 import { migrateDeploy } from './db/migrate'
 import { getStore } from './store/store'
+import { setSrtPlayerVisible } from './services/srtPlayer.service'
+
+function getRuntimeIdentity() {
+  if (__APP_MODE__ === 'HOST') {
+    return {
+      appName: 'APP GC Vmix Host',
+      appUserModelId: 'com.appgc.vmix.host'
+    }
+  }
+
+  if (__APP_MODE__ === 'REMOTO') {
+    return {
+      appName: 'APP GC Vmix Remoto',
+      appUserModelId: 'com.appgc.vmix.remoto'
+    }
+  }
+
+  return {
+    appName: app.getName(),
+    appUserModelId: 'com.electron'
+  }
+}
+
+const runtimeIdentity = getRuntimeIdentity()
+app.setName(runtimeIdentity.appName)
+app.setPath('userData', join(app.getPath('appData'), runtimeIdentity.appName))
 
 if (process.platform === 'linux') {
   // Reduz ruído de logs internos do Chromium/Electron no terminal.
@@ -25,7 +51,7 @@ function createWindow(): void {
   const mainWindow = new BrowserWindow({
     width: 1100,
     height: 720,
-    show: false,
+    show: is.dev,
     autoHideMenuBar: false,
     ...(process.platform === 'linux' ? { icon } : {}),
     webPreferences: {
@@ -38,11 +64,28 @@ function createWindow(): void {
     mainWindow.show()
   })
 
+  mainWindow.webContents.on('did-finish-load', () => {
+    if (!mainWindow.isVisible()) {
+      mainWindow.show()
+    }
+  })
+
+  mainWindow.webContents.on(
+    'did-fail-load',
+    (_event, errorCode, errorDescription, validatedURL) => {
+      console.error('Falha ao carregar renderer:', { errorCode, errorDescription, validatedURL })
+      if (!mainWindow.isVisible()) {
+        mainWindow.show()
+      }
+    }
+  )
+
   let closingConfirmed = false
   mainWindow.on('close', async (event) => {
     if (closingConfirmed) return
 
     event.preventDefault()
+    setSrtPlayerVisible(false)
 
     const store = await getStore()
     const modo = store.get('modo')
@@ -64,6 +107,8 @@ function createWindow(): void {
     if (result.response === 1) {
       closingConfirmed = true
       mainWindow.close()
+    } else {
+      setSrtPlayerVisible(true)
     }
   })
 
@@ -82,7 +127,7 @@ function createWindow(): void {
 app
   .whenReady()
   .then(async () => {
-    electronApp.setAppUserModelId('com.electron')
+    electronApp.setAppUserModelId(runtimeIdentity.appUserModelId)
 
     app.on('browser-window-created', (_, window) => {
       optimizer.watchWindowShortcuts(window)

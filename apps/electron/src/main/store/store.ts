@@ -1,3 +1,5 @@
+import Store from 'electron-store'
+
 type StoreSchema = {
   modo: 'HOST' | 'REMOTO' | null
   conexaoApp: {
@@ -47,8 +49,7 @@ let store: ElectronStoreInstance | null = null
 export async function getStore() {
   if (store) return store
 
-  const mod = await import('electron-store')
-  const StoreCtor = mod.default as unknown as new (opts: {
+  const StoreCtor = ((Store as { default?: unknown }).default ?? Store) as new (opts: {
     name: string
     defaults: StoreSchema
   }) => ElectronStoreInstance

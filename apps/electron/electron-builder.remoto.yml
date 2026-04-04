@@ -1,5 +1,5 @@
-appId: com.appgc.remoto
-productName: App GC Remoto
+appId: com.appgc.vmix.remoto
+productName: APP GC Vmix Remoto
 directories:
   buildResources: build
 files:
@@ -9,14 +9,45 @@ files:
   - '!{.eslintignore,.eslintrc.cjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
   - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
+  - from: ../../node_modules/@prisma
+    to: node_modules/@prisma
+  - from: ../../node_modules/.prisma/client
+    to: node_modules/.prisma/client
+  - from: ../../node_modules/better-sqlite3
+    to: node_modules/better-sqlite3
+  - from: ../../node_modules/bindings
+    to: node_modules/bindings
+  - from: ../../node_modules/file-uri-to-path
+    to: node_modules/file-uri-to-path
+  - from: ../../node_modules/xlsx
+    to: node_modules/xlsx
+  - from: ../../node_modules/adler-32
+    to: node_modules/adler-32
+  - from: ../../node_modules/cfb
+    to: node_modules/cfb
+  - from: ../../node_modules/codepage
+    to: node_modules/codepage
+  - from: ../../node_modules/crc-32
+    to: node_modules/crc-32
+  - from: ../../node_modules/ssf
+    to: node_modules/ssf
+  - from: ../../node_modules/wmf
+    to: node_modules/wmf
+  - from: ../../node_modules/word
+    to: node_modules/word
 asarUnpack:
   - resources/**
+  - node_modules/better-sqlite3/build/Release/*.node
 win:
+  icon: build/icon.ico
   executableName: app-gc-remoto
 nsis:
-  artifactName: app-gc-remoto-${version}-setup.${ext}
-  shortcutName: App GC Remoto
-  uninstallDisplayName: App GC Remoto
+  oneClick: false
+  allowToChangeInstallationDirectory: true
+  guid: 8e2d3c14-8b84-4f2f-a15b-9bdb0d7b4d02
+  artifactName: app-gc-vmix-remoto-${version}-setup.${ext}
+  shortcutName: APP GC Vmix Remoto
+  uninstallDisplayName: APP GC Vmix Remoto
   createDesktopShortcut: always
 mac:
   entitlementsInherit: build/entitlements.mac.plist
@@ -33,10 +64,10 @@ linux:
     - AppImage
     - snap
     - deb
-  maintainer: electronjs.org
+  maintainer: Rafael Lauriano <rafas.lau@gmail.com>
   category: Utility
 appImage:
-  artifactName: app-gc-remoto-${version}.${ext}
+  artifactName: app-gc-vmix-remoto-${version}.${ext}
 npmRebuild: false
 publish:
   provider: generic

@@ -9,8 +9,35 @@ files:
   - '!{.eslintignore,.eslintrc.cjs,.prettierignore,.prettierrc.yaml,dev-app-update.yml,CHANGELOG.md,README.md}'
   - '!{.env,.env.*,.npmrc,pnpm-lock.yaml}'
   - '!{tsconfig.json,tsconfig.node.json,tsconfig.web.json}'
+  - from: ../../node_modules/@prisma
+    to: node_modules/@prisma
+  - from: ../../node_modules/.prisma/client
+    to: node_modules/.prisma/client
+  - from: ../../node_modules/better-sqlite3
+    to: node_modules/better-sqlite3
+  - from: ../../node_modules/bindings
+    to: node_modules/bindings
+  - from: ../../node_modules/file-uri-to-path
+    to: node_modules/file-uri-to-path
+  - from: ../../node_modules/xlsx
+    to: node_modules/xlsx
+  - from: ../../node_modules/adler-32
+    to: node_modules/adler-32
+  - from: ../../node_modules/cfb
+    to: node_modules/cfb
+  - from: ../../node_modules/codepage
+    to: node_modules/codepage
+  - from: ../../node_modules/crc-32
+    to: node_modules/crc-32
+  - from: ../../node_modules/ssf
+    to: node_modules/ssf
+  - from: ../../node_modules/wmf
+    to: node_modules/wmf
+  - from: ../../node_modules/word
+    to: node_modules/word
 asarUnpack:
   - resources/**
+  - node_modules/better-sqlite3/build/Release/*.node
 win:
   executableName: electron-app
 nsis:

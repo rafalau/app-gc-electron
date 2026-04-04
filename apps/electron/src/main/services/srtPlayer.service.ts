@@ -27,11 +27,23 @@ function isSupportedPlatform(platform: NodeJS.Platform): platform is SupportedPl
 }
 
 function getResourceRoot() {
-  if (app.isPackaged) {
-    return process.resourcesPath
+  if (!app.isPackaged) {
+    return join(app.getAppPath(), 'resources')
   }
 
-  return join(app.getAppPath(), 'resources')
+  const candidates = [
+    join(process.resourcesPath, 'app.asar.unpacked', 'resources'),
+    join(process.resourcesPath, 'resources'),
+    process.resourcesPath
+  ]
+
+  for (const candidate of candidates) {
+    if (existsSync(candidate)) {
+      return candidate
+    }
+  }
+
+  return candidates[0]
 }
 
 function getHelperExecutableName() {
@@ -75,8 +87,8 @@ function getChildEnv() {
 function getParentWindowHex(window: BrowserWindow) {
   const nativeHandle = window.getNativeWindowHandle()
 
-  if (nativeHandle.length >= 8) {
-    return nativeHandle.readBigUInt64LE(0).toString(16)
+  if (process.platform === 'win32' && nativeHandle.length >= 4) {
+    return BigInt(nativeHandle.readUInt32LE(0)).toString(16)
   }
 
   if (nativeHandle.length >= 4) {
@@ -88,7 +100,33 @@ function getParentWindowHex(window: BrowserWindow) {
 
 function sendCommand(command: string) {
   if (!playerProcess || playerProcess.killed || !playerProcess.stdin) return
+  console.error(`[srt-player] comando: ${command}`)
   playerProcess.stdin.write(`${command}\n`)
+}
+
+function getResolvedBounds(bounds: BoundsPayload) {
+  if (!parentBrowserWindow) return bounds
+
+  if (process.platform === 'win32') {
+    return {
+      x: Math.round(bounds.x),
+      y: Math.round(bounds.y),
+      width: Math.round(bounds.width),
+      height: Math.round(bounds.height)
+    }
+  }
+
+  const frameBounds = parentBrowserWindow.getBounds()
+  const contentBounds = parentBrowserWindow.getContentBounds()
+  const offsetX = contentBounds.x - frameBounds.x
+  const offsetY = contentBounds.y - frameBounds.y
+
+  return {
+    x: bounds.x + offsetX,
+    y: bounds.y + offsetY,
+    width: bounds.width,
+    height: bounds.height
+  }
 }
 
 export function ensureSrtPlayerWindow(window: BrowserWindow) {
@@ -111,12 +149,16 @@ export function ensureSrtPlayerWindow(window: BrowserWindow) {
   })
   playerProcess = childProcess
 
+  console.error(`[srt-player] helper: ${getHelperPath()}`)
+  console.error(`[srt-player] runtime: ${getPlayerRuntimePath()}`)
+
   childProcess.stderr?.on('data', (chunk) => {
     const msg = String(chunk ?? '').trim()
     if (msg) console.error('[srt-player]', msg)
   })
 
-  childProcess.once('exit', () => {
+  childProcess.once('exit', (code, signal) => {
+    console.error(`[srt-player] helper finalizado code=${code ?? 'null'} signal=${signal ?? 'null'}`)
     playerProcess = null
     parentBrowserWindow = null
     parentWindowId = null
@@ -124,22 +166,10 @@ export function ensureSrtPlayerWindow(window: BrowserWindow) {
 }
 
 export function setSrtPlayerBounds(bounds: BoundsPayload) {
-  let nextBounds = bounds
-
-  if (parentBrowserWindow) {
-    const frameBounds = parentBrowserWindow.getBounds()
-    const contentBounds = parentBrowserWindow.getContentBounds()
-    const offsetX = contentBounds.x - frameBounds.x
-    const offsetY = contentBounds.y - frameBounds.y
-
-    nextBounds = {
-      x: bounds.x + offsetX,
-      y: bounds.y + offsetY,
-      width: bounds.width,
-      height: bounds.height
-    }
-  }
-
+  const nextBounds = getResolvedBounds(bounds)
+  console.error(
+    `[srt-player] bounds renderer=(${bounds.x}, ${bounds.y}, ${bounds.width}, ${bounds.height}) final=(${nextBounds.x}, ${nextBounds.y}, ${nextBounds.width}, ${nextBounds.height})`
+  )
   sendCommand(
     `BOUNDS ${Math.round(nextBounds.x)} ${Math.round(nextBounds.y)} ${Math.round(nextBounds.width)} ${Math.round(nextBounds.height)}`
   )
