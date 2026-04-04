@@ -197,6 +197,8 @@ Na raiz do projeto:
 npm run dev
 ```
 
+Por padrao, `npm run dev` inicia em modo `HOST`.
+
 Executar diretamente em modo HOST:
 
 ```bash

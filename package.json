@@ -10,7 +10,7 @@
   ],
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
-    "dev": "npm -w apps/electron run dev",
+    "dev": "npm -w apps/electron run dev:host",
     "dev:host": "npm -w apps/electron run dev:host",
     "dev:remoto": "npm -w apps/electron run dev:remoto",
     "build": "npm -w apps/electron run build",
@@ -35,8 +35,10 @@
     "xlsx": "^0.18.5"
   },
   "devDependencies": {
-    "@rollup/rollup-win32-x64-msvc": "^4.59.0",
     "cross-env": "^10.1.0",
     "prisma": "^7.6.0"
+  },
+  "optionalDependencies": {
+    "@rollup/rollup-win32-x64-msvc": "^4.59.0"
   }
 }
