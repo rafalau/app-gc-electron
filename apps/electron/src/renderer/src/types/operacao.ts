@@ -1,9 +1,15 @@
 import type { Animal } from './animal'
 import type { Leilao } from './leilao'
 
+export type OperacaoSelecaoModo = 'SIMPLES' | 'COMPOSTO'
+
 export type OperacaoEstadoPayload = {
   leilao: Leilao | null
   animal: Animal | null
+  selecao_modo: OperacaoSelecaoModo
+  animais_selecionados_ids: string[]
+  animal_atual_index: number
+  intervalo_segundos: number
   layout_modo: 'AGREGADAS' | 'SEPARADAS'
   lance_digitado: string
   lance_atual: string
@@ -21,6 +27,10 @@ export type OperacaoArquivoInfo = {
 
 export type OperacaoEstadoPersistido = {
   animalId: string | null
+  selecaoModo: OperacaoSelecaoModo
+  animaisSelecionadosIds: string[]
+  animalAtualIndex: number
+  intervaloSegundos: number
   lanceDigitado: string
   layoutModo: 'AGREGADAS' | 'SEPARADAS'
   lanceAtual: string

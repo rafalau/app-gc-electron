@@ -59,6 +59,10 @@ type AnimalPayload = {
 type OperacaoEstadoPayload = {
   leilao: LeilaoPayload | null
   animal: AnimalPayload | null
+  selecao_modo: 'SIMPLES' | 'COMPOSTO'
+  animais_selecionados_ids: string[]
+  animal_atual_index: number
+  intervalo_segundos: number
   layout_modo: 'AGREGADAS' | 'SEPARADAS'
   lance_digitado: string
   lance_atual: string
@@ -71,6 +75,10 @@ type OperacaoEstadoPayload = {
 
 type OperacaoEstadoPersistido = {
   animalId: string | null
+  selecaoModo: 'SIMPLES' | 'COMPOSTO'
+  animaisSelecionadosIds: string[]
+  animalAtualIndex: number
+  intervaloSegundos: number
   lanceDigitado: string
   layoutModo: 'AGREGADAS' | 'SEPARADAS'
   lanceAtual: string
@@ -90,6 +98,7 @@ type OperacaoConexaoInfo = {
 
 let operacaoServer: Server | null = null
 let operacaoServerPort = 18452
+const OPERACAO_JSON_PATH = '/operacao.json'
 const operacaoSseClientes = new Map<string, Set<import('http').ServerResponse>>()
 const syncSseClientes = new Map<string, Set<import('http').ServerResponse>>()
 
@@ -160,13 +169,22 @@ function getLocalIps() {
   }
 }
 
-function buildUrls(leilaoId: string) {
-  const ips = getLocalIps()
-  const path = `/operacao/${encodeURIComponent(leilaoId)}.json`
+async function getJsonHostIp() {
+  const store = await getStore()
+  const vmix = store.get('vmix')
+  const conexao = store.get('conexaoApp')
+  const ipVmix = String(vmix?.ip ?? '').trim()
+  const configurado = String(conexao?.hostIp ?? '').trim()
+  return ipVmix || configurado || getLocalIps().primary || '127.0.0.1'
+}
+
+async function buildUrls() {
+  const hostIp = await getJsonHostIp()
+  const url = `http://${hostIp}:${operacaoServerPort}${OPERACAO_JSON_PATH}`
 
   return {
-    url_http: `http://${ips.primary}:${operacaoServerPort}${path}`,
-    urls_http: ips.all.map((ip) => `http://${ip}:${operacaoServerPort}${path}`)
+    url_http: url,
+    urls_http: [url]
   }
 }
 
@@ -174,18 +192,15 @@ export async function getModoConexaoOperacao(): Promise<OperacaoConexaoInfo> {
   const store = await getStore()
   const modo = getAppModeOverride() ?? store.get('modo')
   const conexao = store.get('conexaoApp')
-  const ips = getLocalIps()
-  const hostIp =
-    modo === 'HOST'
-      ? ips.primary
-      : String(conexao?.hostIp ?? '').trim() || '127.0.0.1'
+  const configurado = String(conexao?.hostIp ?? '').trim()
+  const hostIp = configurado || getLocalIps().primary || '127.0.0.1'
 
   return {
     modo,
     hostIp,
     porta: operacaoServerPort,
     baseUrl: `http://${hostIp}:${operacaoServerPort}`,
-    ipsDisponiveis: modo === 'HOST' ? ips.all : [hostIp]
+    ipsDisponiveis: [hostIp]
   }
 }
 
@@ -278,8 +293,22 @@ async function lerCorpoJson(req: import('http').IncomingMessage) {
 function normalizarEstadoPersistido(
   estado?: Partial<OperacaoEstadoPersistido> | null
 ): OperacaoEstadoPersistido {
+  const animalAtualIndex = Number(estado?.animalAtualIndex ?? 0)
+  const intervaloSegundos = Number(estado?.intervaloSegundos ?? 10)
+
   return {
     animalId: estado?.animalId ?? null,
+    selecaoModo: estado?.selecaoModo === 'COMPOSTO' ? 'COMPOSTO' : 'SIMPLES',
+    animaisSelecionadosIds: Array.from(
+      new Set(
+        (Array.isArray(estado?.animaisSelecionadosIds) ? estado?.animaisSelecionadosIds : [])
+          .map((id) => String(id ?? '').trim())
+          .filter(Boolean)
+      )
+    ),
+    animalAtualIndex: Number.isInteger(animalAtualIndex) && animalAtualIndex >= 0 ? animalAtualIndex : 0,
+    intervaloSegundos:
+      Number.isInteger(intervaloSegundos) && intervaloSegundos > 0 ? intervaloSegundos : 10,
     lanceDigitado: String(estado?.lanceDigitado ?? ''),
     layoutModo: estado?.layoutModo === 'SEPARADAS' ? 'SEPARADAS' : 'AGREGADAS',
     lanceAtual: String(estado?.lanceAtual ?? '0,00'),
@@ -302,6 +331,10 @@ async function persistirEstadoOperacaoLocal(leilaoId: string, payload: OperacaoE
 
   const proximoEstado = normalizarEstadoPersistido({
     animalId: payload.animal?.id ?? null,
+    selecaoModo: payload.selecao_modo,
+    animaisSelecionadosIds: payload.animais_selecionados_ids ?? [],
+    animalAtualIndex: payload.animal_atual_index ?? 0,
+    intervaloSegundos: payload.intervalo_segundos ?? 10,
     lanceDigitado: payload.lance_digitado ?? '',
     layoutModo: payload.layout_modo,
     lanceAtual: payload.lance_atual ?? '0,00',
@@ -315,6 +348,7 @@ async function persistirEstadoOperacaoLocal(leilaoId: string, payload: OperacaoE
     ...operacaoPorLeilao,
     [leilaoId]: proximoEstado
   })
+  store.set('operacaoLeilaoAtualId', leilaoId)
 
   return proximoEstado
 }
@@ -436,6 +470,23 @@ async function montarJsonOperacao(leilaoId: string) {
       : null
 
   const animal = serializarAnimal(animalRow)
+  const animaisSelecionados =
+    estado?.animaisSelecionadosIds?.length
+      ? await prisma.animal.findMany({
+          where: {
+            id: {
+              in: estado.animaisSelecionadosIds
+            }
+          },
+          select: {
+            id: true,
+            lote: true,
+            nome: true,
+            ordem: true
+          },
+          orderBy: [{ ordem: 'asc' }, { lote: 'asc' }]
+        })
+      : []
   const condicoes =
     String(animal?.condicoes_pagamento_especificas ?? '').trim() ||
     String(leilao?.condicoes_de_pagamento ?? '').trim()
@@ -455,6 +506,12 @@ async function montarJsonOperacao(leilaoId: string) {
       VENDEDOR: animal?.vendedor ?? '',
       PACOTES_COBERTURAS:
         animal?.categoria === 'COBERTURAS' ? animal.condicoes_cobertura.join('\n') : '',
+      MODO_SELECAO: estado?.selecaoModo ?? 'SIMPLES',
+      INTERVALO_SEGUNDOS: estado?.intervaloSegundos ?? 10,
+      ANIMAL_ATUAL_INDEX: estado?.animalAtualIndex ?? 0,
+      LOTES_SELECIONADOS: animaisSelecionados.map((item) => item.lote).join(', '),
+      LOTES_SELECIONADOS_IDS: animaisSelecionados.map((item) => item.id).join(','),
+      LOTES_SELECIONADOS_NOMES: animaisSelecionados.map((item) => item.nome).join(' | '),
       LANCE: estado?.lanceAtual ?? '0,00',
       LANCE_DOLAR: estado?.lanceDolar ?? '0,00',
       TOTAL_REAL: estado?.totalReal ?? '0,00',
@@ -474,6 +531,7 @@ export async function ensureOperacaoServer() {
 
   operacaoServer = createServer(async (req, res) => {
     const url = req.url ?? ''
+    const matchJsonFixo = url.match(/^\/operacao\.json$/)
     const match = url.match(/^\/operacao\/([^/]+)\.json$/)
     const matchEstado = url.match(/^\/operacao\/estado\/([^/]+)$/)
     const matchSync = url.match(/^\/operacao\/sync\/([^/]+)$/)
@@ -505,6 +563,20 @@ export async function ensureOperacaoServer() {
     }
 
     try {
+      if (matchJsonFixo && req.method === 'GET') {
+        const store = await getStore()
+        const leilaoId = String(store.get('operacaoLeilaoAtualId') ?? '').trim()
+
+        if (!leilaoId) {
+          responderJson(res, 200, [])
+          return
+        }
+
+        const body = await montarJsonOperacao(leilaoId)
+        responderJson(res, 200, body)
+        return
+      }
+
       if (match) {
         const leilaoId = decodeURIComponent(match[1] ?? '')
         const body = await montarJsonOperacao(leilaoId)
@@ -526,7 +598,7 @@ export async function ensureOperacaoServer() {
         publicarEstadoOperacao(leilaoId, estado)
         responderJson(res, 200, {
           estado,
-          arquivo: buildUrls(leilaoId)
+          arquivo: await buildUrls()
         })
         return
       }
@@ -839,16 +911,19 @@ export function registrarIpcOperacao() {
 
   ipcMain.handle('operacao:obterArquivo', async (_evt, leilaoId: string) => {
     const conexao = await getModoConexaoOperacao()
+    const store = await getStore()
+    store.set('operacaoLeilaoAtualId', leilaoId)
 
     if (conexao.modo === 'REMOTO') {
+      const url = `${conexao.baseUrl}${OPERACAO_JSON_PATH}`
       return {
-        url_http: `${conexao.baseUrl}/operacao/${encodeURIComponent(leilaoId)}.json`,
-        urls_http: [`${conexao.baseUrl}/operacao/${encodeURIComponent(leilaoId)}.json`]
+        url_http: url,
+        urls_http: [url]
       }
     }
 
     await ensureOperacaoServer()
-    return buildUrls(leilaoId)
+    return buildUrls()
   })
 
   ipcMain.handle('operacao:obterEstado', async (_evt, leilaoId: string) => {
@@ -870,7 +945,10 @@ export function registrarIpcOperacao() {
       const conexao = await getModoConexaoOperacao()
 
       if (conexao.modo === 'REMOTO') {
-        const response = await fetchRemotoJson<{ estado: OperacaoEstadoPersistido | null; arquivo: ReturnType<typeof buildUrls> }>(
+        const response = await fetchRemotoJson<{
+          estado: OperacaoEstadoPersistido | null
+          arquivo: Awaited<ReturnType<typeof buildUrls>>
+        }>(
           `${conexao.baseUrl}/operacao/sync/${encodeURIComponent(leilaoId)}`,
           {
             method: 'POST',
@@ -887,7 +965,7 @@ export function registrarIpcOperacao() {
       await ensureOperacaoServer()
       const estado = await persistirEstadoOperacaoLocal(leilaoId, payload)
       publicarEstadoOperacao(leilaoId, estado)
-      return buildUrls(leilaoId)
+      return buildUrls()
     }
   )
 }

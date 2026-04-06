@@ -23,7 +23,7 @@ const baseUrl = searchParams.get('baseUrl') ?? ''
 
 const carregando = ref(true)
 const salvando = ref(false)
-const tituloLeilao = ref('Edição Rápida')
+const tituloLeilao = ref('Modo Conferência')
 const layoutModo = ref<LayoutInformacoesAnimais>('AGREGADAS')
 const busca = ref('')
 const erro = ref('')
@@ -207,7 +207,7 @@ async function carregarDados(opcoes?: { preservarRascunho?: boolean }) {
       fetchJson<LayoutAnimaisConfig>(`/sync/layout/${encodeURIComponent(leilaoId)}`)
     ])
 
-    tituloLeilao.value = leilao?.titulo_evento || 'Edição Rápida'
+    tituloLeilao.value = leilao?.titulo_evento || 'Modo Conferência'
     layoutModo.value = layout?.modo === 'SEPARADAS' ? 'SEPARADAS' : 'AGREGADAS'
 
     const linhasAtuais = new Map(linhas.value.map((linha) => [linha.id, linha]))
@@ -429,14 +429,14 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-slate-100 text-slate-900">
+  <div class="min-h-screen bg-slate-800 text-slate-900">
     <BaseToast ref="toastRef" />
     <div class="sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur">
       <div class="flex flex-col gap-4 px-5 py-4 lg:px-7">
         <div class="flex flex-wrap items-start justify-between gap-3">
           <div>
             <div class="text-xs font-semibold uppercase tracking-[0.18em] text-blue-700">
-              Edição rápida
+              Modo Conferência
             </div>
             <h1 class="mt-1 text-2xl font-black text-slate-900">{{ tituloLeilao }}</h1>
             <div class="mt-2 flex flex-wrap gap-2 text-xs font-medium text-slate-600">
@@ -458,7 +458,7 @@ onUnmounted(() => {
           <div class="flex flex-wrap gap-2">
             <BaseButton variante="secundario" @click="fecharJanela">Fechar</BaseButton>
             <BaseButton variante="sucesso" :disabled="salvando || totalSujo === 0" @click="salvarTudo">
-              {{ salvando ? 'Salvando...' : 'Salvar tudo' }}
+              {{ salvando ? 'Salvando...' : 'Salvar alterações' }}
             </BaseButton>
           </div>
         </div>
@@ -474,42 +474,61 @@ onUnmounted(() => {
       </div>
     </div>
 
-    <div class="px-5 py-5 lg:px-7">
+    <div class="px-6 py-6 lg:px-8 lg:py-8">
       <div v-if="carregando" class="rounded-3xl border border-slate-200 bg-white p-10 text-center text-slate-500">
         Carregando animais...
       </div>
 
-      <div v-else class="overflow-x-auto border border-slate-200 bg-white shadow-sm">
-        <table class="min-w-[2200px] w-full text-sm">
-          <thead class="bg-slate-900 text-white">
-            <tr class="text-left text-[11px] font-semibold uppercase tracking-[0.14em]">
-              <th class="w-[72px] min-w-[72px] max-w-[72px] px-2 py-3 text-center">Lote</th>
-              <th class="px-3 py-3">Nome</th>
-              <th v-if="layoutModo === 'SEPARADAS'" class="w-[200px] min-w-[200px] max-w-[200px] px-2 py-3 text-center">Raça</th>
-              <th v-if="layoutModo === 'SEPARADAS'" class="w-[120px] min-w-[120px] max-w-[120px] px-2 py-3 text-center">Sexo</th>
-              <th v-if="layoutModo === 'SEPARADAS'" class="w-[136px] min-w-[136px] max-w-[136px] px-2 py-3 text-center">Pelagem</th>
-              <th v-if="layoutModo === 'SEPARADAS'" class="w-[136px] min-w-[136px] max-w-[136px] px-2 py-3 text-center">Nascimento</th>
-              <th v-if="layoutModo === 'AGREGADAS'" class="px-3 py-3">Informações</th>
-              <th class="px-3 py-3">Genealogia</th>
-              <th class="px-3 py-3">Vendedor</th>
-            </tr>
-          </thead>
+      <div v-else-if="linhasFiltradas.length > 0" class="space-y-6">
+        <div
+          v-for="linha in linhasFiltradas"
+          :id="`animal-rapido-${linha.id}`"
+          :key="linha.id"
+          class="rounded-3xl border bg-white p-4 shadow-sm"
+          :class="[
+            linhaEstaSuja(linha) ? 'border-amber-200 bg-amber-50/40' : 'border-slate-200',
+            linha.conflitoExterno ? 'ring-1 ring-inset ring-rose-200' : ''
+          ]"
+        >
+          <div class="flex flex-wrap items-start justify-between gap-3">
+            <div class="flex min-w-0 flex-1 flex-wrap items-center gap-2">
+              <span class="rounded-full bg-blue-100 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-blue-800">
+                Lote {{ linha.lote || 'SEM LOTE' }}
+              </span>
+              <span
+                class="rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em]"
+                :class="
+                  linha.categoria === 'COBERTURAS'
+                    ? 'bg-amber-100 text-amber-800'
+                    : 'bg-emerald-100 text-emerald-800'
+                "
+              >
+                {{ linha.categoria }}
+              </span>
+              <span
+                v-if="linhaEstaSuja(linha)"
+                class="rounded-full bg-amber-100 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-amber-800"
+              >
+                Alterado
+              </span>
+              <span
+                v-if="linha.conflitoExterno"
+                class="rounded-full bg-rose-100 px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-rose-800"
+              >
+                Conflito externo
+              </span>
+            </div>
+          </div>
 
-          <tbody>
-            <tr
-              v-for="linha in linhasFiltradas"
-              :id="`animal-rapido-${linha.id}`"
-              :key="linha.id"
-              class="align-top border-t border-slate-100"
-              :class="[
-                linhaEstaSuja(linha) ? 'bg-amber-50/70' : 'bg-white',
-                linha.conflitoExterno ? 'ring-1 ring-inset ring-rose-200' : ''
-              ]"
-            >
-              <td class="w-[72px] min-w-[72px] max-w-[72px] px-2 py-2 text-center">
+          <div class="mt-4 grid gap-4">
+            <div class="grid grid-cols-1 gap-4 sm:grid-cols-[110px_minmax(0,1fr)]">
+              <div>
+                <div class="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                  Lote
+                </div>
                 <input
                   :value="linha.lote"
-                  class="campo-grid w-full min-w-0 px-2 text-center"
+                  class="campo-grid w-full px-2 text-center"
                   type="text"
                   maxlength="4"
                   @input="
@@ -520,11 +539,15 @@ onUnmounted(() => {
                     )
                   "
                 />
-              </td>
-              <td class="px-2 py-2">
+              </div>
+
+              <div>
+                <div class="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                  Nome
+                </div>
                 <input
                   :value="linha.nome"
-                  class="campo-grid min-w-[240px]"
+                  class="campo-grid w-full"
                   type="text"
                   @input="
                     atualizarCampo(
@@ -534,11 +557,17 @@ onUnmounted(() => {
                     )
                   "
                 />
-              </td>
-              <td v-if="layoutModo === 'SEPARADAS'" class="w-[200px] min-w-[200px] max-w-[200px] px-2 py-2 text-center">
+              </div>
+            </div>
+
+            <div v-if="layoutModo === 'SEPARADAS'" class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div>
+                <div class="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                  Raça
+                </div>
                 <input
                   :value="linha.raca"
-                  class="campo-grid w-full min-w-0 text-center"
+                  class="campo-grid w-full"
                   type="text"
                   @input="
                     atualizarCampo(
@@ -548,11 +577,15 @@ onUnmounted(() => {
                     )
                   "
                 />
-              </td>
-              <td v-if="layoutModo === 'SEPARADAS'" class="w-[136px] min-w-[136px] max-w-[136px] px-2 py-2 text-center">
+              </div>
+
+              <div>
+                <div class="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                  Sexo
+                </div>
                 <input
                   :value="linha.sexo"
-                  class="campo-grid w-full min-w-0 text-center"
+                  class="campo-grid w-full"
                   type="text"
                   @input="
                     atualizarCampo(
@@ -562,11 +595,15 @@ onUnmounted(() => {
                     )
                   "
                 />
-              </td>
-              <td v-if="layoutModo === 'SEPARADAS'" class="w-[136px] min-w-[136px] max-w-[136px] px-2 py-2 text-center">
+              </div>
+
+              <div>
+                <div class="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                  Pelagem
+                </div>
                 <input
                   :value="linha.pelagem"
-                  class="campo-grid w-full min-w-0 text-center"
+                  class="campo-grid w-full"
                   type="text"
                   @input="
                     atualizarCampo(
@@ -576,11 +613,15 @@ onUnmounted(() => {
                     )
                   "
                 />
-              </td>
-              <td v-if="layoutModo === 'SEPARADAS'" class="w-[120px] min-w-[120px] max-w-[120px] px-2 py-2 text-center">
+              </div>
+
+              <div>
+                <div class="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                  Nascimento
+                </div>
                 <input
                   :value="linha.nascimento"
-                  class="campo-grid w-full min-w-0 text-center"
+                  class="campo-grid w-full"
                   type="text"
                   @input="
                     atualizarCampo(
@@ -590,39 +631,53 @@ onUnmounted(() => {
                     )
                   "
                 />
-              </td>
-              <td v-if="layoutModo === 'AGREGADAS'" class="px-2 py-2">
-                <input
-                  :value="linha.informacoes"
-                  class="campo-grid min-w-[320px]"
-                  type="text"
-                  @input="
-                    atualizarCampo(
-                      linha.id,
-                      'informacoes',
-                      normalizarTexto(($event.target as HTMLInputElement).value)
-                    )
-                  "
-                />
-              </td>
-              <td class="px-2 py-2">
-                <input
-                  :value="linha.genealogia"
-                  class="campo-grid min-w-[336px]"
-                  type="text"
-                  @input="
-                    atualizarCampo(
-                      linha.id,
-                      'genealogia',
-                      normalizarTexto(($event.target as HTMLInputElement).value)
-                    )
-                  "
-                />
-              </td>
-              <td class="px-2 py-2">
+              </div>
+            </div>
+
+            <div v-else>
+              <div class="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                Informações
+              </div>
+              <input
+                :value="linha.informacoes"
+                class="campo-grid w-full"
+                type="text"
+                @input="
+                  atualizarCampo(
+                    linha.id,
+                    'informacoes',
+                    normalizarTexto(($event.target as HTMLInputElement).value)
+                  )
+                "
+              />
+            </div>
+
+            <div>
+              <div class="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                Genealogia
+              </div>
+              <input
+                :value="linha.genealogia"
+                class="campo-grid w-full"
+                type="text"
+                @input="
+                  atualizarCampo(
+                    linha.id,
+                    'genealogia',
+                    normalizarTexto(($event.target as HTMLInputElement).value)
+                  )
+                "
+              />
+            </div>
+
+            <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+              <div>
+                <div class="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                  Vendedor
+                </div>
                 <input
                   :value="linha.vendedor"
-                  class="campo-grid min-w-[220px]"
+                  class="campo-grid w-full"
                   type="text"
                   @input="
                     atualizarCampo(
@@ -632,16 +687,53 @@ onUnmounted(() => {
                     )
                   "
                 />
-              </td>
-            </tr>
+              </div>
 
-            <tr v-if="linhasFiltradas.length === 0">
-              <td :colspan="layoutModo === 'SEPARADAS' ? 9 : 6" class="px-4 py-10 text-center text-slate-500">
-                Nenhum animal encontrado.
-              </td>
-            </tr>
-          </tbody>
-        </table>
+              <div>
+                <div class="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                  Condições Específicas
+                </div>
+                <input
+                  :value="linha.condicoes_pagamento_especificas"
+                  class="campo-grid w-full"
+                  type="text"
+                  @input="
+                    atualizarCampo(
+                      linha.id,
+                      'condicoes_pagamento_especificas',
+                      normalizarTexto(($event.target as HTMLInputElement).value)
+                    )
+                  "
+                />
+              </div>
+            </div>
+
+            <div v-if="linha.categoria === 'COBERTURAS'">
+              <div class="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                Pacotes disponíveis
+              </div>
+              <input
+                :value="linha.condicoesTexto"
+                class="campo-grid w-full"
+                type="text"
+                @input="
+                  atualizarCampo(
+                    linha.id,
+                    'condicoesTexto',
+                    normalizarTexto(($event.target as HTMLInputElement).value)
+                  )
+                "
+              />
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div
+        v-else
+        class="rounded-3xl border border-slate-200 bg-white p-10 text-center text-slate-500 shadow-sm"
+      >
+        Nenhum animal encontrado.
       </div>
     </div>
 
@@ -654,7 +746,7 @@ onUnmounted(() => {
         <div class="flex flex-wrap gap-2">
           <BaseButton variante="secundario" @click="fecharJanela">Fechar</BaseButton>
           <BaseButton variante="sucesso" :disabled="salvando || totalSujo === 0" @click="salvarTudo">
-            {{ salvando ? 'Salvando...' : 'Salvar tudo' }}
+            {{ salvando ? 'Salvando...' : 'Salvar alterações' }}
           </BaseButton>
         </div>
       </div>
@@ -671,6 +763,7 @@ onUnmounted(() => {
   padding: 0.75rem 0.875rem;
   color: rgb(15 23 42);
   outline: none;
+  line-height: 1.4;
   transition:
     border-color 0.2s ease,
     box-shadow 0.2s ease,

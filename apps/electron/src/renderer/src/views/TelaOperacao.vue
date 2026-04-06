@@ -12,7 +12,9 @@ import { parseInformacoesAgregadas } from '@renderer/utils/animalInformacoes'
 import type {
   OperacaoArquivoInfo,
   OperacaoConexaoInfo,
-  OperacaoEstadoPayload
+  OperacaoEstadoPayload,
+  OperacaoEstadoPersistido,
+  OperacaoSelecaoModo
 } from '@renderer/types/operacao'
 import {
   atualizarArquivoOperacao,
@@ -36,6 +38,12 @@ import {
 } from '@renderer/services/config.service'
 import { atualizarLeilao } from '@renderer/services/leiloes.service'
 import type { VmixConfig, VmixInput } from '@renderer/types/config'
+
+const HOST_DEFAULT_IP = '127.0.0.1'
+const VMIX_DEFAULT_PORT = 8088
+const SRT_DEFAULT_PORT = 9001
+const INTERVALO_COMPOSTO_PADRAO = 10
+const AJUSTES_LANCE_RAPIDO = [10, 20, 30, 50, 100, 500] as const
 
 const router = useRouter()
 const route = useRoute()
@@ -79,6 +87,10 @@ const inputsVmix = ref<VmixInput[]>([])
 const seletorAnimalRef = ref<HTMLDivElement | null>(null)
 const srtPlayerHostRef = ref<HTMLDivElement | null>(null)
 const conexaoOperacao = ref<OperacaoConexaoInfo | null>(null)
+const modoSelecaoOperacao = ref<OperacaoSelecaoModo>('SIMPLES')
+const animaisSelecionadosIds = ref<string[]>([])
+const animalAtualIndex = ref(0)
+const intervaloCompostoSegundos = ref(INTERVALO_COMPOSTO_PADRAO)
 let srtResizeObserver: ResizeObserver | null = null
 let srtScrollSyncHandler: (() => void) | null = null
 let srtResizeWindowHandler: (() => void) | null = null
@@ -87,14 +99,15 @@ let aplicandoEstadoExterno = false
 let ultimaAssinaturaOperacao = ''
 let srtBoundsSyncTimer: number | null = null
 let srtBoundsSyncFrame: number | null = null
+let rotacaoCompostaTimer: number | null = null
 const formVmix = ref<VmixConfig>({
   ativo: false,
   ip: '',
-  porta: 8088,
+  porta: VMIX_DEFAULT_PORT,
   inputSelecionado: null,
   srt: {
     ativo: false,
-    porta: null
+    porta: SRT_DEFAULT_PORT
   }
 })
 const formLeilao = ref<LeilaoCriarPayload>({
@@ -109,6 +122,10 @@ const formLeilao = ref<LeilaoCriarPayload>({
 const animalSelecionado = computed(
   () => animais.value.find((animal) => animal.id === animalSelecionadoId.value) ?? null
 )
+const animaisSelecionadosCompostos = computed(() => {
+  const ids = new Set(animaisSelecionadosIds.value)
+  return animais.value.filter((animal) => ids.has(animal.id))
+})
 const animaisFiltradosOperacao = computed(() => {
   const termo = buscaAnimal.value.trim().toLowerCase()
   if (!termo) return animais.value
@@ -119,6 +136,18 @@ const animaisFiltradosOperacao = computed(() => {
       .toLowerCase()
       .includes(termo)
   )
+})
+const resumoSelecaoOperacao = computed(() => {
+  if (modoSelecaoOperacao.value === 'SIMPLES') {
+    return animalSelecionado.value
+      ? `${animalSelecionado.value.lote} - ${animalSelecionado.value.nome}`
+      : 'Selecione um animal'
+  }
+
+  const selecionados = animaisSelecionadosCompostos.value
+  if (selecionados.length === 0) return 'Selecione 2 ou mais lotes'
+  if (selecionados.length === 1) return `1 lote selecionado: ${selecionados[0].lote}`
+  return `${selecionados.length} lotes selecionados`
 })
 
 const tituloPagina = computed(() => leilao.value?.titulo_evento || 'Modo Operação')
@@ -189,8 +218,49 @@ function voltar() {
   router.push(`/leilao/${leilaoId}`)
 }
 
+function normalizarIntervaloComposto(valor: number | string | null | undefined) {
+  const numero = Number(valor)
+  return Number.isInteger(numero) && numero > 0 ? numero : INTERVALO_COMPOSTO_PADRAO
+}
+
+function normalizarAnimalAtualIndex(valor: number | string | null | undefined) {
+  const numero = Number(valor)
+  return Number.isInteger(numero) && numero >= 0 ? numero : 0
+}
+
+function normalizarIdsAnimaisSelecionados(ids: string[]) {
+  const idsBase = Array.from(
+    new Set(
+      (Array.isArray(ids) ? ids : [])
+        .map((id) => String(id ?? '').trim())
+        .filter(Boolean)
+    )
+  )
+
+  if (animais.value.length === 0) {
+    return idsBase
+  }
+
+  const indicePorId = new Map(animais.value.map((animal, index) => [animal.id, index]))
+
+  return idsBase
+    .filter((id) => indicePorId.has(id))
+    .sort((a, b) => (indicePorId.get(a) ?? 0) - (indicePorId.get(b) ?? 0))
+}
+
+function limparRotacaoComposta() {
+  if (rotacaoCompostaTimer !== null) {
+    window.clearTimeout(rotacaoCompostaTimer)
+    rotacaoCompostaTimer = null
+  }
+}
+
 function assinarEstadoOperacao(payload: {
   animalId: string | null
+  selecaoModo: OperacaoSelecaoModo
+  animaisSelecionadosIds: string[]
+  animalAtualIndex: number
+  intervaloSegundos: number
   lanceDigitado: string
   layoutModo: 'AGREGADAS' | 'SEPARADAS'
   lanceAtual: string
@@ -202,16 +272,43 @@ function assinarEstadoOperacao(payload: {
   return JSON.stringify(payload)
 }
 
-async function aplicarEstadoOperacaoExterno(estado: {
-  animalId: string | null
-  lanceDigitado: string
-  layoutModo: 'AGREGADAS' | 'SEPARADAS'
-  lanceAtual: string
-  lanceAtualCentavos: number
-  lanceDolar: string
-  totalReal: string
-  totalDolar: string
-} | null) {
+function aplicarEstadoOperacao(estado: OperacaoEstadoPersistido) {
+  modoSelecaoOperacao.value = estado.selecaoModo === 'COMPOSTO' ? 'COMPOSTO' : 'SIMPLES'
+  animaisSelecionadosIds.value = normalizarIdsAnimaisSelecionados(estado.animaisSelecionadosIds)
+  animalAtualIndex.value = normalizarAnimalAtualIndex(estado.animalAtualIndex)
+  intervaloCompostoSegundos.value = normalizarIntervaloComposto(estado.intervaloSegundos)
+  animalSelecionadoId.value = estado.animalId ?? ''
+  layoutInformacoesModo.value = estado.layoutModo
+  lanceDigitado.value = estado.lanceDigitado ?? ''
+  lanceAtual.value = estado.lanceAtual ?? '0,00'
+  lanceAtualCentavos.value = estado.lanceAtualCentavos ?? 0
+}
+
+function sincronizarSelecaoCompostaLocal() {
+  intervaloCompostoSegundos.value = normalizarIntervaloComposto(intervaloCompostoSegundos.value)
+
+  if (modoSelecaoOperacao.value !== 'COMPOSTO') {
+    animaisSelecionadosIds.value = animalSelecionadoId.value ? [animalSelecionadoId.value] : []
+    animalAtualIndex.value = 0
+    return
+  }
+
+  animaisSelecionadosIds.value = normalizarIdsAnimaisSelecionados(animaisSelecionadosIds.value)
+
+  if (animaisSelecionadosIds.value.length === 0) {
+    animalSelecionadoId.value = ''
+    animalAtualIndex.value = 0
+    return
+  }
+
+  if (!animaisSelecionadosIds.value.includes(animalSelecionadoId.value)) {
+    animalSelecionadoId.value = animaisSelecionadosIds.value[0]
+  }
+
+  animalAtualIndex.value = Math.max(animaisSelecionadosIds.value.indexOf(animalSelecionadoId.value), 0)
+}
+
+async function aplicarEstadoOperacaoExterno(estado: OperacaoEstadoPersistido | null) {
   if (!estado) return
 
   const assinatura = assinarEstadoOperacao(estado)
@@ -219,13 +316,10 @@ async function aplicarEstadoOperacaoExterno(estado: {
 
   aplicandoEstadoExterno = true
   ultimaAssinaturaOperacao = assinatura
-  animalSelecionadoId.value = estado.animalId ?? ''
-  layoutInformacoesModo.value = estado.layoutModo
-  lanceDigitado.value = estado.lanceDigitado ?? ''
-  lanceAtual.value = estado.lanceAtual ?? '0,00'
-  lanceAtualCentavos.value = estado.lanceAtualCentavos ?? 0
+  aplicarEstadoOperacao(estado)
   await nextTick()
   aplicandoEstadoExterno = false
+  agendarRotacaoComposta()
 }
 
 async function iniciarRealtimeOperacao() {
@@ -241,16 +335,7 @@ async function iniciarRealtimeOperacao() {
 
   source.onmessage = (event) => {
     try {
-      const estado = JSON.parse(event.data) as {
-        animalId: string | null
-        lanceDigitado: string
-        layoutModo: 'AGREGADAS' | 'SEPARADAS'
-        lanceAtual: string
-        lanceAtualCentavos: number
-        lanceDolar: string
-        totalReal: string
-        totalDolar: string
-      } | null
+      const estado = JSON.parse(event.data) as OperacaoEstadoPersistido | null
       void aplicarEstadoOperacaoExterno(estado)
     } catch (error) {
       console.error(error)
@@ -285,6 +370,20 @@ function fecharModalConfiguracao() {
   erroConfiguracaoModal.value = ''
   erroInputsVmix.value = ''
   focarCampoLance()
+}
+
+function restaurarPadroesHostVmix() {
+  formVmix.value = {
+    ...formVmix.value,
+    ip: HOST_DEFAULT_IP,
+    porta: VMIX_DEFAULT_PORT,
+    srt: {
+      ...formVmix.value.srt,
+      porta: SRT_DEFAULT_PORT
+    }
+  }
+  erroConfiguracaoModal.value = ''
+  erroInputsVmix.value = ''
 }
 
 async function toggleMuteSrtPlayer() {
@@ -420,7 +519,7 @@ function selecionarInputVmix(event: Event) {
 async function salvarConfiguracaoModal() {
   const ip = String(formVmix.value.ip ?? '').trim()
   const porta = Number(formVmix.value.porta)
-  const srtPorta = formVmix.value.srt.porta === null ? null : Number(formVmix.value.srt.porta)
+  const srtPorta = Number(formVmix.value.srt.porta)
 
   if ((formVmix.value.ativo || formVmix.value.srt.ativo) && !ip) {
     erroConfiguracaoModal.value = 'Informe o IP do vMix.'
@@ -447,10 +546,11 @@ async function salvarConfiguracaoModal() {
     inputSelecionado: formVmix.value.inputSelecionado,
     srt: {
       ativo: Boolean(formVmix.value.srt.ativo),
-      porta: formVmix.value.srt.ativo ? srtPorta : null
+      porta: Number.isInteger(srtPorta) && srtPorta > 0 ? srtPorta : SRT_DEFAULT_PORT
     }
   })
 
+  arquivoInfo.value = await obterArquivoOperacao(leilaoId)
   modalConfiguracaoAberto.value = false
   erroConfiguracaoModal.value = ''
   await sincronizarPlaybackSrtPlayer()
@@ -527,6 +627,59 @@ function resetarLances() {
   focarCampoLance()
 }
 
+function deveAlternarAnimaisCompostos() {
+  return modoSelecaoOperacao.value === 'COMPOSTO' && animaisSelecionadosIds.value.length >= 2
+}
+
+function definirAnimalSelecionado(
+  animalId: string,
+  options?: { preservarLances?: boolean; fecharSeletor?: boolean; sincronizar?: boolean }
+) {
+  const mudou = animalSelecionadoId.value !== animalId
+  animalSelecionadoId.value = animalId
+
+  if (modoSelecaoOperacao.value === 'COMPOSTO') {
+    animalAtualIndex.value = Math.max(animaisSelecionadosIds.value.indexOf(animalId), 0)
+  } else {
+    animaisSelecionadosIds.value = animalId ? [animalId] : []
+    animalAtualIndex.value = 0
+  }
+
+  buscaAnimal.value = ''
+  indiceAnimalDestacado.value = 0
+  if (options?.fecharSeletor !== false) {
+    seletorAnimalAberto.value = false
+  }
+
+  if (mudou) {
+    if (options?.preservarLances) {
+      focarCampoLance()
+    } else {
+      resetarLances()
+    }
+  }
+
+  if ((mudou || options?.sincronizar) && options?.sincronizar !== false) {
+    void sincronizarArquivo()
+  }
+}
+
+function agendarRotacaoComposta() {
+  limparRotacaoComposta()
+  if (!deveAlternarAnimaisCompostos()) return
+
+  rotacaoCompostaTimer = window.setTimeout(() => {
+    const ids = normalizarIdsAnimaisSelecionados(animaisSelecionadosIds.value)
+    if (ids.length < 2) return
+
+    const indiceAtual = Math.max(ids.indexOf(animalSelecionadoId.value), 0)
+    const proximoIndice = (indiceAtual + 1) % ids.length
+    animalAtualIndex.value = proximoIndice
+    definirAnimalSelecionado(ids[proximoIndice], { preservarLances: true })
+    agendarRotacaoComposta()
+  }, intervaloCompostoSegundos.value * 1000)
+}
+
 function atualizarDigitacaoLance(event: Event) {
   lanceDigitado.value = (event.target as HTMLInputElement).value.replace(/[^\d]/g, '')
 }
@@ -553,20 +706,90 @@ function enviarLance() {
   void sincronizarArquivo()
 }
 
+function ajustarLanceRapido(delta: number) {
+  const valorAtual = Number(lanceAtualCentavos.value || 0) / 100
+  const proximoValor = Math.max(0, valorAtual + delta)
+
+  lanceAtualCentavos.value = Math.round(proximoValor * 100)
+  lanceAtual.value = formatarMoeda(proximoValor)
+  lanceDigitado.value = ''
+  focarCampoLance()
+  void sincronizarArquivo()
+}
+
 function editarAnimalSelecionado() {
   if (!animalSelecionado.value) return
   abrirEditar(animalSelecionado.value)
 }
 
-async function abrirEdicaoRapida() {
+async function abrirModoConferencia() {
   await window.janela.abrirEdicaoRapida(leilaoId, animalSelecionado.value?.id)
 }
 
 function selecionarAnimalOperacao(animalId: string) {
-  animalSelecionadoId.value = animalId
-  buscaAnimal.value = ''
-  seletorAnimalAberto.value = false
-  indiceAnimalDestacado.value = 0
+  if (modoSelecaoOperacao.value === 'COMPOSTO') {
+    const idsSelecionados = new Set(animaisSelecionadosIds.value)
+
+    if (idsSelecionados.has(animalId)) {
+      idsSelecionados.delete(animalId)
+    } else {
+      idsSelecionados.add(animalId)
+    }
+
+    animaisSelecionadosIds.value = normalizarIdsAnimaisSelecionados(Array.from(idsSelecionados))
+    sincronizarSelecaoCompostaLocal()
+
+    if (!animaisSelecionadosIds.value.includes(animalSelecionadoId.value)) {
+      if (animaisSelecionadosIds.value.length > 0) {
+        definirAnimalSelecionado(animaisSelecionadosIds.value[0], {
+          preservarLances: true,
+          fecharSeletor: false
+        })
+      } else {
+        animalSelecionadoId.value = ''
+        animalAtualIndex.value = 0
+        void sincronizarArquivo()
+      }
+      agendarRotacaoComposta()
+      return
+    }
+
+    definirAnimalSelecionado(animalId, {
+      preservarLances: true,
+      fecharSeletor: false,
+      sincronizar: true
+    })
+    agendarRotacaoComposta()
+    return
+  }
+
+  definirAnimalSelecionado(animalId)
+}
+
+function definirModoSelecaoOperacao(modo: OperacaoSelecaoModo) {
+  if (modoSelecaoOperacao.value === modo) return
+
+  modoSelecaoOperacao.value = modo
+
+  if (modo === 'COMPOSTO') {
+    const animalBase = animalSelecionadoId.value || animais.value[0]?.id || ''
+    animaisSelecionadosIds.value = animalBase ? [animalBase] : []
+    sincronizarSelecaoCompostaLocal()
+    void sincronizarArquivo()
+    agendarRotacaoComposta()
+    focarCampoLance()
+    return
+  }
+
+  limparRotacaoComposta()
+  const animalBase = animalSelecionadoId.value || animais.value[0]?.id || ''
+  if (animalBase) {
+    definirAnimalSelecionado(animalBase, { preservarLances: true })
+  } else {
+    animaisSelecionadosIds.value = []
+    animalAtualIndex.value = 0
+    void sincronizarArquivo()
+  }
 }
 
 function abrirSeletorAnimal() {
@@ -635,8 +858,8 @@ async function salvarLeilaoOperacao(payload: LeilaoCriarPayload) {
   erroLeilaoModal.value = ''
 
   if (!leilao.value) return
-  if (!payload.multiplicador || payload.multiplicador <= 0) {
-    erroLeilaoModal.value = 'Multiplicador deve ser maior que 0'
+  if (!Number.isInteger(payload.multiplicador) || payload.multiplicador <= 0) {
+    erroLeilaoModal.value = 'Multiplicador deve ser um número inteiro maior que 0'
     return
   }
   if (payload.usa_dolar) {
@@ -708,6 +931,10 @@ async function sincronizarArquivo() {
     const payload: OperacaoEstadoPayload = {
       leilao: leilaoPlain,
       animal: animalPlain,
+      selecao_modo: modoSelecaoOperacao.value,
+      animais_selecionados_ids: [...animaisSelecionadosIds.value],
+      animal_atual_index: animalAtualIndex.value,
+      intervalo_segundos: intervaloCompostoSegundos.value,
       layout_modo: layoutInformacoesModo.value,
       lance_digitado: lanceDigitado.value,
       lance_atual: lanceAtual.value,
@@ -719,6 +946,10 @@ async function sincronizarArquivo() {
     }
     ultimaAssinaturaOperacao = assinarEstadoOperacao({
       animalId: payload.animal?.id ?? null,
+      selecaoModo: payload.selecao_modo,
+      animaisSelecionadosIds: payload.animais_selecionados_ids,
+      animalAtualIndex: payload.animal_atual_index,
+      intervaloSegundos: payload.intervalo_segundos,
       lanceDigitado: payload.lance_digitado,
       layoutModo: payload.layout_modo,
       lanceAtual: payload.lance_atual,
@@ -739,32 +970,80 @@ watch(
   animais,
   (lista) => {
     if (lista.length === 0) {
+      animaisSelecionadosIds.value = []
       animalSelecionadoId.value = ''
+      limparRotacaoComposta()
+      return
+    }
+
+    if (modoSelecaoOperacao.value === 'COMPOSTO') {
+      const idsNormalizados = normalizarIdsAnimaisSelecionados(animaisSelecionadosIds.value)
+      animaisSelecionadosIds.value =
+        idsNormalizados.length > 0
+          ? idsNormalizados
+          : [
+              (animalIdInicial && lista.some((animal) => animal.id === animalIdInicial)
+                ? animalIdInicial
+                : animalSelecionadoId.value && lista.some((animal) => animal.id === animalSelecionadoId.value)
+                  ? animalSelecionadoId.value
+                  : lista[0].id)
+            ]
+
+      sincronizarSelecaoCompostaLocal()
+      agendarRotacaoComposta()
       return
     }
 
     if (animalSelecionadoId.value && lista.some((animal) => animal.id === animalSelecionadoId.value)) {
+      animaisSelecionadosIds.value = [animalSelecionadoId.value]
       return
     }
 
     if (animalIdInicial && lista.some((animal) => animal.id === animalIdInicial)) {
-      selecionarAnimalOperacao(animalIdInicial)
+      definirAnimalSelecionado(animalIdInicial)
       return
     }
 
-    selecionarAnimalOperacao(lista[0].id)
+    definirAnimalSelecionado(lista[0].id)
   },
   { immediate: true }
 )
 
-watch(animalSelecionadoId, () => {
+watch(buscaAnimal, () => {
+  indiceAnimalDestacado.value = 0
+})
+
+watch(modoSelecaoOperacao, () => {
   if (aplicandoEstadoExterno) return
-  resetarLances()
+  sincronizarSelecaoCompostaLocal()
+  agendarRotacaoComposta()
   void sincronizarArquivo()
 })
 
-watch(buscaAnimal, () => {
-  indiceAnimalDestacado.value = 0
+watch(
+  () => animaisSelecionadosIds.value.join('|'),
+  () => {
+    if (aplicandoEstadoExterno) return
+    sincronizarSelecaoCompostaLocal()
+    agendarRotacaoComposta()
+    if (modoSelecaoOperacao.value === 'COMPOSTO') {
+      void sincronizarArquivo()
+    }
+  }
+)
+
+watch(intervaloCompostoSegundos, (valor) => {
+  const normalizado = normalizarIntervaloComposto(valor)
+  if (normalizado !== valor) {
+    intervaloCompostoSegundos.value = normalizado
+    return
+  }
+
+  if (aplicandoEstadoExterno) return
+  agendarRotacaoComposta()
+  if (modoSelecaoOperacao.value === 'COMPOSTO') {
+    void sincronizarArquivo()
+  }
 })
 
 watch(carregando, (value) => {
@@ -808,6 +1087,7 @@ onMounted(async () => {
 
 onBeforeUnmount(() => {
   void window.janela.definirPreset('DESKTOP')
+  limparRotacaoComposta()
 })
 
 onMounted(() => {
@@ -881,10 +1161,10 @@ onUnmounted(() => {
         <button
           type="button"
           class="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 max-[500px]:flex max-[500px]:w-full max-[500px]:justify-center"
-          @click="abrirEdicaoRapida"
+          @click="abrirModoConferencia"
         >
           <i class="fas fa-table text-xs" />
-          Edição Rápida
+          Modo Conferência
         </button>
 
         <button
@@ -1009,6 +1289,56 @@ onUnmounted(() => {
         <div v-if="carregando" class="mt-3 text-sm text-slate-500">Carregando animais...</div>
 
         <div v-else class="mt-3 flex flex-col gap-3">
+          <div class="flex items-center gap-2 text-[10px] font-semibold uppercase tracking-[0.18em] text-slate-500">
+            <button
+              type="button"
+              :class="[
+                'rounded-full border px-2.5 py-1 transition',
+                modoSelecaoOperacao === 'SIMPLES'
+                  ? 'border-blue-600 bg-blue-600 text-white'
+                  : 'border-slate-300 bg-white text-slate-600 hover:border-slate-400'
+              ]"
+              @click="definirModoSelecaoOperacao('SIMPLES')"
+            >
+              Simples
+            </button>
+            <button
+              type="button"
+              :class="[
+                'rounded-full border px-2.5 py-1 transition',
+                modoSelecaoOperacao === 'COMPOSTO'
+                  ? 'border-blue-600 bg-blue-600 text-white'
+                  : 'border-slate-300 bg-white text-slate-600 hover:border-slate-400'
+              ]"
+              @click="definirModoSelecaoOperacao('COMPOSTO')"
+            >
+              Composto
+            </button>
+          </div>
+
+          <div
+            v-if="modoSelecaoOperacao === 'COMPOSTO'"
+            class="rounded-2xl border border-slate-200 bg-white/80 px-3 py-3"
+          >
+            <div class="flex items-end gap-3">
+              <div class="min-w-0 flex-1">
+                <div class="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                  Intervalo
+                </div>
+                <input
+                  v-model.number="intervaloCompostoSegundos"
+                  class="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 shadow-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100"
+                  type="number"
+                  min="1"
+                  step="1"
+                />
+              </div>
+              <div class="pb-2 text-[11px] text-slate-500">
+                Alterna os lotes selecionados sem zerar o lance.
+              </div>
+            </div>
+          </div>
+
           <div class="flex items-center gap-2">
             <div ref="seletorAnimalRef" class="relative min-w-0 flex-1">
               <button
@@ -1017,11 +1347,7 @@ onUnmounted(() => {
                 @click="toggleSeletorAnimal"
               >
                 <span class="min-w-0 truncate">
-                  {{
-                    animalSelecionado
-                      ? `${animalSelecionado.lote} - ${animalSelecionado.nome}`
-                      : 'Selecione um animal'
-                  }}
+                  {{ resumoSelecaoOperacao }}
                 </span>
                 <i
                   :class="[
@@ -1046,6 +1372,13 @@ onUnmounted(() => {
                   @keydown.enter.prevent="confirmarAnimalDestacado"
                 />
 
+                <div
+                  v-if="modoSelecaoOperacao === 'COMPOSTO'"
+                  class="mt-2 rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-[11px] text-blue-800"
+                >
+                  Selecione 2 ou mais lotes para alternar automaticamente.
+                </div>
+
                 <div class="mt-2 max-h-64 overflow-auto rounded-xl border border-slate-100">
                   <button
                     v-for="(animal, index) in animaisFiltradosOperacao"
@@ -1057,17 +1390,34 @@ onUnmounted(() => {
                     ]"
                     @click="selecionarAnimalOperacao(animal.id)"
                   >
-                    <span class="min-w-0 truncate">{{ animal.lote }} - {{ animal.nome }}</span>
-                    <span
-                      class="shrink-0 rounded-full px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em]"
-                      :class="
-                        animal.categoria === 'COBERTURAS'
-                          ? 'bg-amber-100 text-amber-800'
-                          : 'bg-emerald-100 text-emerald-800'
-                      "
-                    >
-                      {{ animal.categoria }}
-                    </span>
+                    <div class="flex min-w-0 items-center gap-3">
+                      <input
+                        v-if="modoSelecaoOperacao === 'COMPOSTO'"
+                        :checked="animaisSelecionadosIds.includes(animal.id)"
+                        class="h-4 w-4 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                        type="checkbox"
+                        tabindex="-1"
+                      />
+                      <span class="min-w-0 truncate">{{ animal.lote }} - {{ animal.nome }}</span>
+                    </div>
+                    <div class="flex shrink-0 items-center gap-2">
+                      <span
+                        v-if="animalSelecionadoId === animal.id"
+                        class="rounded-full bg-blue-100 px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em] text-blue-700"
+                      >
+                        Em exibição
+                      </span>
+                      <span
+                        class="rounded-full px-2 py-1 text-[10px] font-semibold uppercase tracking-[0.12em]"
+                        :class="
+                          animal.categoria === 'COBERTURAS'
+                            ? 'bg-amber-100 text-amber-800'
+                            : 'bg-emerald-100 text-emerald-800'
+                        "
+                      >
+                        {{ animal.categoria }}
+                      </span>
+                    </div>
                   </button>
 
                   <div
@@ -1091,6 +1441,29 @@ onUnmounted(() => {
             </button>
           </div>
 
+          <div
+            v-if="modoSelecaoOperacao === 'COMPOSTO' && animaisSelecionadosCompostos.length > 0"
+            class="rounded-2xl border border-slate-200 bg-white/90 px-3 py-3"
+          >
+            <div class="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+              Lotes em rotação
+            </div>
+            <div class="mt-2 flex flex-wrap gap-2">
+              <span
+                v-for="animal in animaisSelecionadosCompostos"
+                :key="animal.id"
+                class="rounded-full px-3 py-1 text-xs font-semibold"
+                :class="
+                  animalSelecionadoId === animal.id
+                    ? 'bg-blue-600 text-white'
+                    : 'bg-slate-100 text-slate-700'
+                "
+              >
+                {{ animal.lote }}
+              </span>
+            </div>
+          </div>
+
           <input
             ref="inputLanceRef"
             v-model="lanceDigitado"
@@ -1101,6 +1474,30 @@ onUnmounted(() => {
             @input="atualizarDigitacaoLance"
             @keydown.enter.prevent="enviarLance"
           />
+
+          <div class="flex w-full gap-1">
+            <button
+              v-for="valor in AJUSTES_LANCE_RAPIDO"
+              :key="`mais-${valor}`"
+              type="button"
+              class="min-w-0 flex-1 rounded-lg border border-emerald-200 bg-emerald-50 px-1 py-1.5 text-[11px] font-semibold leading-none text-emerald-700 transition hover:border-emerald-300 hover:bg-emerald-100"
+              @click="ajustarLanceRapido(valor)"
+            >
+              +{{ valor }}
+            </button>
+          </div>
+
+          <div class="flex w-full gap-1">
+            <button
+              v-for="valor in AJUSTES_LANCE_RAPIDO"
+              :key="`menos-${valor}`"
+              type="button"
+              class="min-w-0 flex-1 rounded-lg border border-rose-200 bg-rose-50 px-1 py-1.5 text-[11px] font-semibold leading-none text-rose-700 transition hover:border-rose-300 hover:bg-rose-100"
+              @click="ajustarLanceRapido(-valor)"
+            >
+              -{{ valor }}
+            </button>
+          </div>
 
           <button
             v-if="vmixConfigurado"
@@ -1385,8 +1782,8 @@ onUnmounted(() => {
             v-model.number="formLeilao.multiplicador"
             class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800 shadow-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100"
             type="number"
-            min="0"
-            step="0.01"
+            min="1"
+            step="1"
           />
         </div>
 
@@ -1485,7 +1882,6 @@ onUnmounted(() => {
           </label>
           <input
             v-model="formVmix.ip"
-            :disabled="!formVmix.ativo"
             class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800 shadow-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
             type="text"
             placeholder="Ex.: 192.168.0.50"
@@ -1498,7 +1894,6 @@ onUnmounted(() => {
           </label>
           <input
             v-model.number="formVmix.porta"
-            :disabled="!formVmix.ativo"
             class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800 shadow-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
             type="number"
             min="1"
@@ -1514,13 +1909,12 @@ onUnmounted(() => {
           </label>
           <input
             v-model.number="formVmix.srt.porta"
-            :disabled="!formVmix.srt.ativo"
             class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800 shadow-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
             type="number"
             min="1"
             max="65535"
             step="1"
-            placeholder="Ex.: 9998"
+            placeholder="9001"
           />
         </div>
 
@@ -1574,12 +1968,20 @@ onUnmounted(() => {
 
         <div class="col-span-12">
           <div class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-            Porta padrão vMix: <strong>8088</strong>
+            Padrões do host: IP <strong>127.0.0.1</strong>, vMix <strong>8088</strong> e SRT
+            <strong>9001</strong>
           </div>
         </div>
       </div>
 
       <template #footer>
+        <BaseButton
+          v-if="conexaoOperacao?.modo === 'HOST'"
+          variante="secundario"
+          @click="restaurarPadroesHostVmix"
+        >
+          Restaurar padrões
+        </BaseButton>
         <BaseButton @click="fecharModalConfiguracao">Cancelar</BaseButton>
         <BaseButton variante="primario" @click="salvarConfiguracaoModal">Salvar</BaseButton>
       </template>

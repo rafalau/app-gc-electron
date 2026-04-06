@@ -130,8 +130,8 @@ export function useLeiloes() {
       return
     }
 
-    if (!payload.multiplicador || payload.multiplicador <= 0) {
-      erroModal.value = 'Multiplicador deve ser maior que 0'
+    if (!Number.isInteger(payload.multiplicador) || payload.multiplicador <= 0) {
+      erroModal.value = 'Multiplicador deve ser um número inteiro maior que 0'
       return
     }
 

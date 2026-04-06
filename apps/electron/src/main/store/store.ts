@@ -1,7 +1,11 @@
 import Store from 'electron-store'
 
+const VMIX_DEFAULT_PORT = 8088
+const SRT_DEFAULT_PORT = 9001
+
 type StoreSchema = {
   modo: 'HOST' | 'REMOTO' | null
+  operacaoLeilaoAtualId: string | null
   conexaoApp: {
     hostIp: string
     porta: number
@@ -29,6 +33,11 @@ type StoreSchema = {
     string,
     {
       animalId: string | null
+      selecaoModo: 'SIMPLES' | 'COMPOSTO'
+      animaisSelecionadosIds: string[]
+      animalAtualIndex: number
+      intervaloSegundos: number
+      lanceDigitado: string
       layoutModo: 'AGREGADAS' | 'SEPARADAS'
       lanceAtual: string
       lanceAtualCentavos: number
@@ -63,6 +72,7 @@ export async function getStore() {
     name: 'config',
     defaults: {
       modo: null,
+      operacaoLeilaoAtualId: null,
       conexaoApp: {
         hostIp: '',
         porta: 18452
@@ -70,11 +80,11 @@ export async function getStore() {
       vmix: {
         ativo: false,
         ip: '',
-        porta: 8088,
+        porta: VMIX_DEFAULT_PORT,
         inputSelecionado: null,
         srt: {
           ativo: false,
-          porta: null
+          porta: SRT_DEFAULT_PORT
         }
       },
       layoutAnimaisPorLeilao: {},

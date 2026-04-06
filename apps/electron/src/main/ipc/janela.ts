@@ -4,9 +4,9 @@ import { is } from '@electron-toolkit/utils'
 import { getModoConexaoOperacao } from './operacao'
 
 type JanelaPreset = 'DESKTOP' | 'OPERACAO'
-const janelasEdicaoRapida = new Map<string, BrowserWindow>()
+const janelasConferencia = new Map<string, BrowserWindow>()
 
-async function carregarJanelaEdicaoRapida(win: BrowserWindow, leilaoId: string, animalId?: string) {
+async function carregarJanelaConferencia(win: BrowserWindow, leilaoId: string, animalId?: string) {
   const conexao = await getModoConexaoOperacao()
   const query = new URLSearchParams({
     window: 'quick-edit',
@@ -50,20 +50,20 @@ export function registrarIpcJanela() {
 
   ipcMain.handle('janela:abrirEdicaoRapida', async (event, leilaoId: string, animalId?: string) => {
     const parent = BrowserWindow.fromWebContents(event.sender)
-    const chave = leilaoId
+  const chave = leilaoId
 
-    const existente = janelasEdicaoRapida.get(chave)
+    const existente = janelasConferencia.get(chave)
     if (existente && !existente.isDestroyed()) {
-      await carregarJanelaEdicaoRapida(existente, leilaoId, animalId)
+      await carregarJanelaConferencia(existente, leilaoId, animalId)
       existente.show()
       existente.focus()
       return
     }
 
     const win = new BrowserWindow({
-      width: 1500,
+      width: 920,
       height: 860,
-      minWidth: 1100,
+      minWidth: 760,
       minHeight: 720,
       show: false,
       autoHideMenuBar: false,
@@ -79,10 +79,10 @@ export function registrarIpcJanela() {
     })
 
     win.on('closed', () => {
-      janelasEdicaoRapida.delete(chave)
+      janelasConferencia.delete(chave)
     })
 
-    janelasEdicaoRapida.set(chave, win)
-    await carregarJanelaEdicaoRapida(win, leilaoId, animalId)
+    janelasConferencia.set(chave, win)
+    await carregarJanelaConferencia(win, leilaoId, animalId)
   })
 }

@@ -43,6 +43,10 @@ type ApiImportProviderConfigIpc = {
   url: string
 }
 
+const HOST_DEFAULT_IP = '127.0.0.1'
+const VMIX_DEFAULT_PORT = 8088
+const SRT_DEFAULT_PORT = 9001
+
 function getAppModeOverride(): 'HOST' | 'REMOTO' | null {
   if (__APP_MODE__ === 'HOST' || __APP_MODE__ === 'REMOTO') {
     return __APP_MODE__
@@ -52,10 +56,13 @@ function getAppModeOverride(): 'HOST' | 'REMOTO' | null {
 }
 
 function normalizarConfigVmix(vmix?: Partial<VmixConfigIpc> | null): VmixConfigIpc {
+  const porta = Number(vmix?.porta)
+  const portaSrt = Number(vmix?.srt?.porta)
+
   return {
     ativo: Boolean(vmix?.ativo),
     ip: String(vmix?.ip ?? '').trim(),
-    porta: Number(vmix?.porta) || 8088,
+    porta: Number.isInteger(porta) && porta > 0 ? porta : VMIX_DEFAULT_PORT,
     inputSelecionado: vmix?.inputSelecionado
       ? {
           key: String(vmix.inputSelecionado.key ?? '').trim(),
@@ -66,7 +73,7 @@ function normalizarConfigVmix(vmix?: Partial<VmixConfigIpc> | null): VmixConfigI
       : null,
     srt: {
       ativo: Boolean(vmix?.srt?.ativo),
-      porta: vmix?.srt?.porta ? Number(vmix.srt.porta) : null
+      porta: Number.isInteger(portaSrt) && portaSrt > 0 ? portaSrt : SRT_DEFAULT_PORT
     }
   }
 }
@@ -106,11 +113,11 @@ function aplicarDefaultsDeModo(
     return {
       modoConfig: {
         ...modoConfig,
-        hostIp: '127.0.0.1'
+        hostIp: modoConfig.hostIp || HOST_DEFAULT_IP
       },
       vmix: {
         ...vmix,
-        ip: '127.0.0.1'
+        ip: vmix.ip || HOST_DEFAULT_IP
       }
     }
   }
@@ -120,7 +127,7 @@ function aplicarDefaultsDeModo(
       modoConfig,
       vmix: {
         ...vmix,
-        ip: modoConfig.hostIp
+        ip: vmix.ip || modoConfig.hostIp
       }
     }
   }

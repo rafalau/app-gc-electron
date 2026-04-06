@@ -7,6 +7,7 @@ type Modo = 'HOST' | 'REMOTO'
 
 const router = useRouter()
 const modo = ref<Modo | null>(null)
+const ipHost = ref('127.0.0.1')
 const ipRemoto = ref('')
 const erro = ref('')
 
@@ -25,7 +26,7 @@ const continuar = async () => {
 
   await salvarModoConfig({
     modo: modo.value,
-    hostIp: modo.value === 'HOST' ? '127.0.0.1' : ipRemoto.value.trim(),
+    hostIp: modo.value === 'HOST' ? ipHost.value.trim() || '127.0.0.1' : ipRemoto.value.trim(),
     portaApp: 18452
   })
 
@@ -35,6 +36,7 @@ const continuar = async () => {
 onMounted(async () => {
   const config = await obterModoConfig()
   modo.value = config.modo
+  ipHost.value = config.modo === 'HOST' ? config.hostIp || '127.0.0.1' : '127.0.0.1'
   ipRemoto.value = config.modo === 'REMOTO' ? config.hostIp : ''
 })
 </script>
@@ -167,6 +169,21 @@ onMounted(async () => {
                   </li>
                 </ul>
               </button>
+            </div>
+
+            <div v-if="modo === 'HOST'" class="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-5">
+              <label class="block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+                IP do Host
+              </label>
+              <input
+                v-model="ipHost"
+                class="mt-2 w-full rounded-xl border border-slate-200 bg-white px-4 py-3 text-sm text-slate-800 shadow-sm outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+                type="text"
+                placeholder="Ex.: 192.168.0.10"
+              />
+              <div class="mt-2 text-xs text-slate-500">
+                Esse IP será usado no endereço fixo do JSON e nas conexões do host.
+              </div>
             </div>
 
             <div v-if="modo === 'REMOTO'" class="mt-6 rounded-2xl border border-slate-200 bg-slate-50 p-5">

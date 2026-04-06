@@ -6,7 +6,6 @@ import BaseDropdown from '@renderer/components/ui/BaseDropdown.vue'
 import BaseModal from '@renderer/components/ui/BaseModal.vue'
 import AnimalTabela from '@renderer/components/animal/AnimalTabela.vue'
 import AnimalModal from '@renderer/components/animal/AnimalModal.vue'
-import ConferenciaAnimaisModal from '@renderer/components/animal/ConferenciaAnimaisModal.vue'
 import ApiImportModal from '@renderer/components/animal/ApiImportModal.vue'
 import ImportSummaryModal from '@renderer/components/animal/ImportSummaryModal.vue'
 import { useAnimais } from '@renderer/composables/useAnimais'
@@ -73,7 +72,6 @@ const {
 
 const tituloPagina = computed(() => leilao.value?.titulo_evento || 'Leilão')
 const limparAberto = ref(false)
-const conferenciaAberta = ref(false)
 const configuracoesAbertas = ref(false)
 const confirmacaoLimpar = ref('')
 const layoutModoDraft = ref<'AGREGADAS' | 'SEPARADAS'>('AGREGADAS')
@@ -115,23 +113,16 @@ const gerenciarItems = computed(() => {
       }
     },
     {
-      label: 'Edição Rápida',
-      icon: 'fa-table',
+      label: 'Modo Conferência',
+      icon: 'fa-clipboard-check',
       action: () => {
-        void abrirEdicaoRapida()
+        void abrirModoConferencia()
       }
     }
   ]
 
   if (leilao.value && leilao.value.total_animais > 0) {
     items.push(
-      {
-        label: 'Modo Conferência',
-        icon: 'fa-clipboard-check',
-        action: () => {
-          abrirConferencia()
-        }
-      },
       {
         label: 'Modo Operação',
         icon: 'fa-broadcast-tower',
@@ -178,14 +169,6 @@ function fecharLimpar() {
 async function confirmarLimpar() {
   await limparTodos()
   fecharLimpar()
-}
-
-function abrirConferencia() {
-  conferenciaAberta.value = true
-}
-
-function fecharConferencia() {
-  conferenciaAberta.value = false
 }
 
 function abrirConfiguracoes() {
@@ -246,7 +229,7 @@ function abrirModoOperacao(animal?: Animal) {
   })
 }
 
-async function abrirEdicaoRapida(animal?: Animal) {
+async function abrirModoConferencia(animal?: Animal) {
   await window.janela.abrirEdicaoRapida(leilaoId, animal?.id)
 }
 
@@ -363,12 +346,6 @@ onMounted(async () => {
     />
 
     <ImportSummaryModal :aberto="resumoAberto" :resumo="resumoImportacao" @fechar="fecharResumo" />
-
-    <ConferenciaAnimaisModal
-      :aberto="conferenciaAberta"
-      :animais="animaisFiltrados"
-      @fechar="fecharConferencia"
-    />
 
     <BaseModal :aberto="configuracoesAbertas" titulo="Configurações dos Animais" @fechar="fecharConfiguracoes">
       <div class="space-y-5">

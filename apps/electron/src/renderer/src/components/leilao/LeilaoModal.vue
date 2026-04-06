@@ -162,8 +162,8 @@ const salvar = () => {
           v-model.number="formLocal.multiplicador"
           class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800 shadow-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100"
           type="number"
-          min="0"
-          step="0.01"
+          min="1"
+          step="1"
         />
       </div>
 

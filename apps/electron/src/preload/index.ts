@@ -68,6 +68,10 @@ type Animal = {
 type OperacaoEstadoPayload = {
   leilao: Leilao | null
   animal: Animal | null
+  selecao_modo: 'SIMPLES' | 'COMPOSTO'
+  animais_selecionados_ids: string[]
+  animal_atual_index: number
+  intervalo_segundos: number
   layout_modo: 'AGREGADAS' | 'SEPARADAS'
   lance_digitado: string
   lance_atual: string
@@ -90,6 +94,21 @@ type OperacaoConexaoPayload = {
   porta: number
   baseUrl: string
   ipsDisponiveis: string[]
+}
+
+type OperacaoEstadoPersistido = {
+  animalId: string | null
+  selecaoModo: 'SIMPLES' | 'COMPOSTO'
+  animaisSelecionadosIds: string[]
+  animalAtualIndex: number
+  intervaloSegundos: number
+  lanceDigitado: string
+  layoutModo: 'AGREGADAS' | 'SEPARADAS'
+  lanceAtual: string
+  lanceAtualCentavos: number
+  lanceDolar: string
+  totalReal: string
+  totalDolar: string
 }
 
 type ApiImportProviderConfigPayload = {
@@ -211,7 +230,8 @@ if (process.contextIsolated) {
 
     contextBridge.exposeInMainWorld('operacao', {
       obterArquivo: (leilaoId: string) => ipcRenderer.invoke('operacao:obterArquivo', leilaoId),
-      obterEstado: (leilaoId: string) => ipcRenderer.invoke('operacao:obterEstado', leilaoId),
+      obterEstado: (leilaoId: string): Promise<OperacaoEstadoPersistido | null> =>
+        ipcRenderer.invoke('operacao:obterEstado', leilaoId),
       obterConexao: (): Promise<OperacaoConexaoPayload> => ipcRenderer.invoke('operacao:obterConexao'),
       atualizarArquivo: (leilaoId: string, payload: OperacaoEstadoPayload) =>
         ipcRenderer.invoke('operacao:atualizarArquivo', leilaoId, payload)

@@ -1,6 +1,9 @@
 import type { ModoConfig, SrtPreviewStatus, VmixConfig, VmixInput } from '../types/config'
 import type { ApiImportProviderConfig } from '../types/importacao'
 
+const VMIX_DEFAULT_PORT = 8088
+const SRT_DEFAULT_PORT = 9001
+
 function normalizarInput(input: VmixInput | null): VmixInput | null {
   if (!input) return null
 
@@ -13,14 +16,17 @@ function normalizarInput(input: VmixInput | null): VmixInput | null {
 }
 
 function normalizarConfig(config: VmixConfig): VmixConfig {
+  const porta = Number(config.porta)
+  const portaSrt = Number(config.srt?.porta)
+
   return {
     ativo: Boolean(config.ativo),
     ip: String(config.ip ?? '').trim(),
-    porta: Number(config.porta) || 8088,
+    porta: Number.isInteger(porta) && porta > 0 ? porta : VMIX_DEFAULT_PORT,
     inputSelecionado: normalizarInput(config.inputSelecionado),
     srt: {
       ativo: Boolean(config.srt?.ativo),
-      porta: config.srt?.porta ? Number(config.srt.porta) : null
+      porta: Number.isInteger(portaSrt) && portaSrt > 0 ? portaSrt : SRT_DEFAULT_PORT
     }
   }
 }
