@@ -1,7 +1,9 @@
 import { app, shell, BrowserWindow, ipcMain, dialog } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
-import icon from '../../resources/icon.png?asset'
+import defaultIcon from '../../resources/icon.png?asset'
+import hostIcon from '../../resources/icon-host.png?asset'
+import remotoIcon from '../../resources/icon-remoto.png?asset'
 import { registrarIpcLeiloes } from './ipc/leiloes'
 import { registrarIpcConfig } from './ipc/config'
 import { registrarIpcAnimais } from './ipc/animais'
@@ -42,6 +44,12 @@ const runtimeIdentity = getRuntimeIdentity()
 app.setName(runtimeIdentity.appName)
 app.setPath('userData', join(app.getPath('appData'), runtimeIdentity.appName))
 
+function getRuntimeIcon() {
+  if (__APP_MODE__ === 'HOST') return hostIcon
+  if (__APP_MODE__ === 'REMOTO') return remotoIcon
+  return defaultIcon
+}
+
 if (process.platform === 'linux') {
   // Reduz ruído de logs internos do Chromium/Electron no terminal.
   app.commandLine.appendSwitch('disable-logging')
@@ -54,7 +62,7 @@ function createWindow(): void {
     height: 720,
     show: is.dev,
     autoHideMenuBar: false,
-    ...(process.platform === 'linux' ? { icon } : {}),
+    ...(process.platform === 'linux' ? { icon: getRuntimeIcon() } : {}),
     webPreferences: {
       preload: join(__dirname, '../preload/index.js'),
       sandbox: false

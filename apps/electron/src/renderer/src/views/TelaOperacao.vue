@@ -8,7 +8,10 @@ import BaseSwitch from '@renderer/components/ui/BaseSwitch.vue'
 import { useAnimais } from '@renderer/composables/useAnimais'
 import type { LeilaoCriarPayload } from '@renderer/types/leilao'
 import { applyUppercaseInput } from '@renderer/utils/uppercaseInput'
-import { parseInformacoesAgregadas } from '@renderer/utils/animalInformacoes'
+import {
+  formatarInformacoesParaExibicao,
+  parseInformacoesAgregadas
+} from '@renderer/utils/animalInformacoes'
 import type {
   OperacaoArquivoInfo,
   OperacaoConexaoInfo,
@@ -597,7 +600,7 @@ function getCondicoesEspecificas() {
 }
 
 function getInformacoesAnimal() {
-  return String(animalSelecionado.value?.informacoes ?? '').trim()
+  return formatarInformacoesParaExibicao(animalSelecionado.value?.informacoes ?? '')
 }
 
 function formatarMoeda(valor: number) {

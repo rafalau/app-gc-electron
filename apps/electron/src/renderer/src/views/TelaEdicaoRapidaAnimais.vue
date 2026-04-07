@@ -5,6 +5,7 @@ import BaseToast from '@renderer/components/ui/BaseToast.vue'
 import { type Animal, type AnimalAtualizacaoEmLotePayload } from '@renderer/types/animal'
 import {
   buildInformacoesAgregadas,
+  formatarInformacoesParaExibicao,
   parseInformacoesAgregadas
 } from '@renderer/utils/animalInformacoes'
 
@@ -128,7 +129,7 @@ function serializarAnimal(animal: Animal) {
     sexo: animal.sexo,
     pelagem: animal.pelagem,
     nascimento: animal.nascimento,
-    informacoes: animal.informacoes,
+    informacoes: formatarInformacoesParaExibicao(animal.informacoes),
     genealogia: animal.genealogia,
     condicoes_cobertura: animal.condicoes_cobertura
   })
@@ -155,6 +156,7 @@ function criarLinha(animal: Animal): LinhaEdicaoRapida {
   const parsed = parseInformacoesAgregadas(animal.informacoes)
   return {
     ...animal,
+    informacoes: formatarInformacoesParaExibicao(animal.informacoes),
     raca: animal.raca || parsed.raca,
     sexo: animal.sexo || parsed.sexo,
     pelagem: animal.pelagem || parsed.pelagem,

@@ -3,7 +3,10 @@ import { computed, ref } from 'vue'
 import BaseDropdown from '../ui/BaseDropdown.vue'
 import type { Animal } from '@renderer/types/animal'
 import type { LayoutInformacoesAnimais } from '@renderer/composables/useAnimais'
-import { parseInformacoesAgregadas } from '@renderer/utils/animalInformacoes'
+import {
+  formatarInformacoesParaExibicao,
+  parseInformacoesAgregadas
+} from '@renderer/utils/animalInformacoes'
 
 const props = defineProps<{
   animais: Animal[]
@@ -53,7 +56,7 @@ function getInformacoesTexto(animal: Animal) {
     return animal.condicoes_cobertura.join(' • ') || 'Sem condições'
   }
 
-  return animal.informacoes || 'Sem informações'
+  return formatarInformacoesParaExibicao(animal.informacoes) || 'Sem informações'
 }
 
 function getCampoSeparado(

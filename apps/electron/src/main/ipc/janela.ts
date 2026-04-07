@@ -1,10 +1,25 @@
-import { BrowserWindow, ipcMain } from 'electron'
+import { BrowserWindow, ipcMain, screen } from 'electron'
 import { join } from 'path'
 import { is } from '@electron-toolkit/utils'
 import { getModoConexaoOperacao } from './operacao'
 
 type JanelaPreset = 'DESKTOP' | 'OPERACAO'
 const janelasConferencia = new Map<string, BrowserWindow>()
+
+function centralizarNaTela(win: BrowserWindow, parent?: BrowserWindow | null) {
+  const bounds = win.getBounds()
+  const pontoReferencia = parent
+    ? {
+        x: Math.round(parent.getBounds().x + parent.getBounds().width / 2),
+        y: Math.round(parent.getBounds().y + parent.getBounds().height / 2)
+      }
+    : screen.getCursorScreenPoint()
+  const display = screen.getDisplayNearestPoint(pontoReferencia)
+  const area = display.workArea
+  const x = Math.round(area.x + (area.width - bounds.width) / 2)
+  const y = Math.round(area.y + (area.height - bounds.height) / 2)
+  win.setPosition(x, y)
+}
 
 async function carregarJanelaConferencia(win: BrowserWindow, leilaoId: string, animalId?: string) {
   const conexao = await getModoConexaoOperacao()
@@ -32,13 +47,13 @@ function aplicarPreset(win: BrowserWindow, preset: JanelaPreset) {
   if (preset === 'OPERACAO') {
     win.setMinimumSize(380, 720)
     win.setSize(550, Math.max(win.getSize()[1], 820), true)
-    win.center()
+    centralizarNaTela(win)
     return
   }
 
   win.setMinimumSize(1100, 720)
   win.setSize(1100, 720, true)
-  win.center()
+  centralizarNaTela(win)
 }
 
 export function registrarIpcJanela() {
@@ -67,7 +82,6 @@ export function registrarIpcJanela() {
       minHeight: 720,
       show: false,
       autoHideMenuBar: false,
-      parent: parent ?? undefined,
       webPreferences: {
         preload: join(__dirname, '../../preload/index.js'),
         sandbox: false
@@ -75,6 +89,7 @@ export function registrarIpcJanela() {
     })
 
     win.on('ready-to-show', () => {
+      centralizarNaTela(win, parent)
       win.show()
     })
 

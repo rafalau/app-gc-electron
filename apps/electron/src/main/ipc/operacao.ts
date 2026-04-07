@@ -377,10 +377,23 @@ export async function fetchRemotoJson<T>(url: string, init?: RequestInit): Promi
 }
 
 function parseInformacoesAgregadas(informacoes: string) {
-  const partes = String(informacoes ?? '')
+  const partesBrutas = String(informacoes ?? '')
     .split('|')
     .map((parte) => parte.trim())
-    .filter(Boolean)
+  const possuiLayoutEstruturado =
+    partesBrutas.length >= 4 || (partesBrutas.length > 1 && partesBrutas.some((parte) => parte === ''))
+
+  if (possuiLayoutEstruturado) {
+    const [raca = '', sexo = '', pelagem = '', ...resto] = partesBrutas
+    return {
+      raca,
+      sexo,
+      pelagem,
+      nascimento: resto.join(' | ').trim()
+    }
+  }
+
+  const partes = partesBrutas.filter(Boolean)
 
   if (partes.length >= 4) {
     const [raca, sexo, pelagem, ...resto] = partes
@@ -402,6 +415,14 @@ function parseInformacoesAgregadas(informacoes: string) {
   }
 
   return { raca: '', sexo: '', pelagem: '', nascimento: '' }
+}
+
+function formatarInformacoesParaExibicao(informacoes: string) {
+  return String(informacoes ?? '')
+    .split('|')
+    .map((parte) => parte.trim())
+    .filter(Boolean)
+    .join(' | ')
 }
 
 function serializarAnimal(animal: any): AnimalPayload | null {
@@ -497,7 +518,7 @@ async function montarJsonOperacao(leilaoId: string) {
       CONDICOES: condicoes,
       LOTE: animal?.lote ?? '',
       NOME: animal?.nome ?? '',
-      INFORMACOES: animal?.informacoes ?? '',
+      INFORMACOES: formatarInformacoesParaExibicao(animal?.informacoes ?? ''),
       RACA: animal?.raca || parsed.raca || '',
       SEXO: animal?.sexo || parsed.sexo || '',
       PELAGEM: animal?.pelagem || parsed.pelagem || '',

@@ -2,7 +2,10 @@
 import BaseModal from '../ui/BaseModal.vue'
 import BaseButton from '../ui/BaseButton.vue'
 import type { Animal } from '@renderer/types/animal'
-import { parseInformacoesAgregadas } from '@renderer/utils/animalInformacoes'
+import {
+  formatarInformacoesParaExibicao,
+  parseInformacoesAgregadas
+} from '@renderer/utils/animalInformacoes'
 
 defineProps<{
   aberto: boolean
@@ -27,7 +30,7 @@ function getCondicoesEspecificas(animal: Animal) {
 }
 
 function getInformacoes(animal: Animal) {
-  return String(animal.informacoes ?? '').trim()
+  return formatarInformacoesParaExibicao(animal.informacoes)
 }
 </script>
 

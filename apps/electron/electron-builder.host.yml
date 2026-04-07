@@ -39,7 +39,7 @@ asarUnpack:
   - resources/**
   - node_modules/better-sqlite3/build/Release/*.node
 win:
-  icon: build/icon.ico
+  icon: build/icon-host.ico
   executableName: app-gc-host
 nsis:
   oneClick: false

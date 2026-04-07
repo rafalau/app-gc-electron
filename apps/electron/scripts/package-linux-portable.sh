@@ -15,8 +15,6 @@ DIST_DIR="$APP_ROOT/dist"
 RUNTIME_SOURCE="$REPO_ROOT/node_modules/electron/dist"
 APP_NODE_MODULES_SOURCE="$APP_ROOT/node_modules"
 ROOT_NODE_MODULES_SOURCE="$REPO_ROOT/node_modules"
-ICON_SOURCE="$APP_ROOT/resources/icon.png"
-
 if [[ "$MODE" == "HOST" ]]; then
   PACKAGE_DIR="$DIST_DIR/app-gc-linux-host"
   TAR_NAME="app-gc-linux-host.tar.gz"
@@ -24,6 +22,7 @@ if [[ "$MODE" == "HOST" ]]; then
   EXEC_NAME="run-app-gc-host.sh"
   DESKTOP_NAME="app-gc-vmix-host.desktop"
   COMMENT="Operacao principal do APP GC Vmix"
+  ICON_SOURCE="$APP_ROOT/resources/icon-host.png"
 else
   PACKAGE_DIR="$DIST_DIR/app-gc-linux-remoto"
   TAR_NAME="app-gc-linux-remoto.tar.gz"
@@ -31,6 +30,7 @@ else
   EXEC_NAME="run-app-gc-remoto.sh"
   DESKTOP_NAME="app-gc-vmix-remoto.desktop"
   COMMENT="Cliente remoto do APP GC Vmix"
+  ICON_SOURCE="$APP_ROOT/resources/icon-remoto.png"
 fi
 
 rm -rf "$PACKAGE_DIR"

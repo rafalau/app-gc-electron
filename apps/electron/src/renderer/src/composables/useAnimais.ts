@@ -23,6 +23,7 @@ import {
 import { obterLeilao } from '../services/leiloes.service'
 import { obterApiImportProviders } from '../services/config.service'
 import { obterConexaoOperacao } from '../services/operacao.service'
+import { formatarInformacoesParaExibicao } from '../utils/animalInformacoes'
 
 export type ModalAnimalModo = 'CRIAR' | 'EDITAR'
 export type LayoutInformacoesAnimais = 'AGREGADAS' | 'SEPARADAS'
@@ -241,7 +242,7 @@ export function useAnimais(leilaoId: string) {
       sexo: animal.sexo,
       pelagem: animal.pelagem,
       nascimento: animal.nascimento,
-      informacoes: animal.informacoes,
+      informacoes: formatarInformacoesParaExibicao(animal.informacoes),
       genealogia: animal.genealogia,
       condicoes_cobertura: [...animal.condicoes_cobertura]
     }

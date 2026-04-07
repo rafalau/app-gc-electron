@@ -124,13 +124,6 @@ const gerenciarItems = computed(() => {
   if (leilao.value && leilao.value.total_animais > 0) {
     items.push(
       {
-        label: 'Modo Operação',
-        icon: 'fa-broadcast-tower',
-        action: () => {
-          abrirModoOperacao()
-        }
-      },
-      {
         label: 'Limpar',
         icon: 'fa-trash-alt',
         color: 'danger' as const,
@@ -272,9 +265,22 @@ onMounted(async () => {
         </div>
       </div>
 
-      <div class="flex flex-wrap items-center justify-end gap-2">
-        <BaseDropdown :items="importItems" label="Importar" />
-        <BaseDropdown :items="gerenciarItems" label="Gerenciar" />
+      <div class="flex flex-wrap items-center justify-end gap-2 max-[640px]:flex-col max-[640px]:items-stretch">
+        <button
+          v-if="leilao && leilao.total_animais > 0"
+          type="button"
+          class="botao-ao-vivo inline-flex items-center justify-center gap-1.5 rounded-lg border border-rose-300 bg-rose-600 px-2.5 py-1.5 text-xs font-medium text-white shadow-sm shadow-rose-300/70 transition hover:border-rose-200 hover:bg-rose-500 max-[640px]:w-full"
+          @click="abrirModoOperacao()"
+        >
+          <span class="h-2 w-2 rounded-full bg-white/95" />
+          Modo Operação
+        </button>
+        <div class="actions-dropdown max-[640px]:w-full">
+          <BaseDropdown :items="importItems" label="Importar" />
+        </div>
+        <div class="actions-dropdown max-[640px]:w-full">
+          <BaseDropdown :items="gerenciarItems" label="Gerenciar" />
+        </div>
         <BaseButton variante="primario" class="w-full sm:w-auto" @click="abrirCriar">
           <i class="fas fa-plus mr-1" />
           Novo Animal
@@ -522,3 +528,39 @@ onMounted(async () => {
     </BaseModal>
   </div>
 </template>
+
+<style scoped>
+.botao-ao-vivo {
+  animation: pulsar-ao-vivo 1.1s ease-in-out infinite;
+}
+
+@media (max-width: 640px) {
+  .actions-dropdown :deep(> div) {
+    display: block;
+    width: 100%;
+  }
+
+  .actions-dropdown :deep(button) {
+    display: flex;
+    width: 100%;
+    justify-content: center;
+  }
+}
+
+@keyframes pulsar-ao-vivo {
+  0%,
+  100% {
+    box-shadow:
+      0 0 0 0 rgba(244, 63, 94, 0.52),
+      0 10px 24px rgba(244, 63, 94, 0.28);
+    filter: saturate(1);
+  }
+
+  50% {
+    box-shadow:
+      0 0 0 10px rgba(244, 63, 94, 0),
+      0 14px 30px rgba(190, 24, 93, 0.42);
+    filter: saturate(1.15);
+  }
+}
+</style>

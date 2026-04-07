@@ -6,10 +6,23 @@ export type AnimalInformacoesEstruturadas = {
 }
 
 export function parseInformacoesAgregadas(informacoes: string): AnimalInformacoesEstruturadas {
-  const partes = String(informacoes ?? '')
+  const partesBrutas = String(informacoes ?? '')
     .split('|')
     .map((parte) => parte.trim())
-    .filter(Boolean)
+  const possuiLayoutEstruturado =
+    partesBrutas.length >= 4 || (partesBrutas.length > 1 && partesBrutas.some((parte) => parte === ''))
+
+  if (possuiLayoutEstruturado) {
+    const [raca = '', sexo = '', pelagem = '', ...resto] = partesBrutas
+    return {
+      raca,
+      sexo,
+      pelagem,
+      nascimento: resto.join(' | ').trim()
+    }
+  }
+
+  const partes = partesBrutas.filter(Boolean)
 
   if (partes.length >= 4) {
     const [raca, sexo, pelagem, ...resto] = partes
@@ -39,8 +52,14 @@ export function buildInformacoesAgregadas({
   pelagem,
   nascimento
 }: AnimalInformacoesEstruturadas) {
-  return [raca, sexo, pelagem, nascimento]
-    .map((parte) => String(parte ?? '').trim())
+  const partes = [raca, sexo, pelagem, nascimento].map((parte) => String(parte ?? '').trim())
+  return partes.some(Boolean) ? partes.join('   |   ') : ''
+}
+
+export function formatarInformacoesParaExibicao(informacoes: string) {
+  return String(informacoes ?? '')
+    .split('|')
+    .map((parte) => parte.trim())
     .filter(Boolean)
-    .join('   |   ')
+    .join(' | ')
 }
