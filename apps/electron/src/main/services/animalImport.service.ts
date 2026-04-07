@@ -9,6 +9,11 @@ export type AnimalImportInput = {
   sexo?: string
   pelagem?: string
   nascimento?: string
+  altura?: string
+  pai?: string
+  mae?: string
+  cidade?: string
+  uf?: string
   vendedor?: string
   informacoes: string
   genealogia: string
@@ -36,6 +41,15 @@ const headerAliases: Record<string, keyof AnimalImportInput> = {
   sexo: 'sexo',
   pelagem: 'pelagem',
   nascimento: 'nascimento',
+  datanascimento: 'nascimento',
+  nascimentoanimal: 'nascimento',
+  altura: 'altura',
+  pai: 'pai',
+  mae: 'mae',
+  cidade: 'cidade',
+  municipio: 'cidade',
+  uf: 'uf',
+  estado: 'uf',
   vendedor: 'vendedor',
   proprietario: 'vendedor',
   informacoes: 'informacoes',
@@ -56,13 +70,30 @@ function normalizeString(value: unknown) {
   return String(value ?? '').trim()
 }
 
+function joinNonEmpty(parts: Array<string | undefined>, separator: string) {
+  return parts.map((item) => normalizeString(item)).filter(Boolean).join(separator)
+}
+
 function normalizeInput(input: AnimalImportInput, options: ImportAnimaisOptions = {}): AnimalImportInput {
   const raca = normalizeString(input.raca).toUpperCase()
   const sexo = normalizeString(input.sexo).toUpperCase()
   const pelagem = normalizeString(input.pelagem).toUpperCase()
   const nascimento = normalizeString(input.nascimento).toUpperCase()
+  const altura = normalizeString(input.altura).toUpperCase()
+  const pai = normalizeString(input.pai).toUpperCase()
+  const mae = normalizeString(input.mae).toUpperCase()
+  const cidade = normalizeString(input.cidade).toUpperCase()
+  const uf = normalizeString(input.uf).toUpperCase()
   const vendedor = normalizeString(input.vendedor).toUpperCase()
   const informacoes = normalizeString(input.informacoes).toUpperCase()
+  const local = joinNonEmpty([cidade, uf], '/')
+  const genealogia = normalizeString(input.genealogia).toUpperCase() || joinNonEmpty([pai, mae], '   X   ')
+  const vendedorComLocal = vendedor
+    ? `VENDEDOR: ${joinNonEmpty([vendedor, local], ' - ')}`
+    : local
+      ? `LOCALIZAÇÃO: ${local}`
+      : ''
+
   return {
     lote: normalizeString(input.lote).toUpperCase(),
     nome: normalizeString(input.nome).toUpperCase(),
@@ -70,17 +101,23 @@ function normalizeInput(input: AnimalImportInput, options: ImportAnimaisOptions 
     sexo,
     pelagem,
     nascimento,
-    vendedor: vendedor ? `VENDEDOR: ${vendedor}` : '',
+    altura,
+    pai,
+    mae,
+    cidade,
+    uf,
+    vendedor: vendedorComLocal,
     informacoes: [
       options.incluirRacaNasInformacoes ? raca : '',
       sexo,
       pelagem,
       nascimento,
-      informacoes
+      altura ? `ALTURA: ${altura}` : '',
+      informacoes ? `INFO: ${informacoes}` : ''
     ]
       .filter(Boolean)
       .join('   |   '),
-    genealogia: normalizeString(input.genealogia).toUpperCase(),
+    genealogia,
     categoria: normalizeString(input.categoria || 'ANIMAIS').toUpperCase(),
     condicoes_cobertura: Array.isArray(input.condicoes_cobertura)
       ? input.condicoes_cobertura
@@ -260,7 +297,10 @@ export async function importAnimaisFromWorkbook(
   filePath: string,
   options: ImportAnimaisOptions = {}
 ): Promise<ImportSummary> {
-  const workbook = XLSX.readFile(filePath)
+  const workbook = XLSX.readFile(filePath, {
+    cellDates: false,
+    cellText: true
+  })
   const sheetName = workbook.SheetNames[0]
 
   if (!sheetName) {
@@ -268,7 +308,8 @@ export async function importAnimaisFromWorkbook(
   }
 
   const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(workbook.Sheets[sheetName], {
-    defval: ''
+    defval: '',
+    raw: false
   })
 
   const inputs = rows.map((row) => mapRow(row) as AnimalImportInput)

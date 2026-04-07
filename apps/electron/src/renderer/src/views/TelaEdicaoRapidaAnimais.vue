@@ -129,6 +129,7 @@ function serializarAnimal(animal: Animal) {
     sexo: animal.sexo,
     pelagem: animal.pelagem,
     nascimento: animal.nascimento,
+    altura: animal.altura,
     informacoes: formatarInformacoesParaExibicao(animal.informacoes),
     genealogia: animal.genealogia,
     condicoes_cobertura: animal.condicoes_cobertura
@@ -146,6 +147,7 @@ function serializarLinha(linha: LinhaEdicaoRapida) {
     sexo: linha.sexo,
     pelagem: linha.pelagem,
     nascimento: linha.nascimento,
+    altura: linha.altura,
     informacoes: linha.informacoes,
     genealogia: linha.genealogia,
     condicoes_cobertura: normalizarCondicoesTexto(linha.condicoesTexto)
@@ -153,14 +155,20 @@ function serializarLinha(linha: LinhaEdicaoRapida) {
 }
 
 function criarLinha(animal: Animal): LinhaEdicaoRapida {
-  const parsed = parseInformacoesAgregadas(animal.informacoes)
+  const precisaExtrairCamposEstruturados =
+    !animal.raca && !animal.sexo && !animal.pelagem && !animal.nascimento && !animal.altura
+  const parsed = precisaExtrairCamposEstruturados
+    ? parseInformacoesAgregadas(animal.informacoes)
+    : { raca: '', sexo: '', pelagem: '', nascimento: '', altura: '' }
+
   return {
     ...animal,
     informacoes: formatarInformacoesParaExibicao(animal.informacoes),
-    raca: animal.raca || parsed.raca,
-    sexo: animal.sexo || parsed.sexo,
-    pelagem: animal.pelagem || parsed.pelagem,
-    nascimento: animal.nascimento || parsed.nascimento,
+    raca: precisaExtrairCamposEstruturados ? parsed.raca : animal.raca,
+    sexo: precisaExtrairCamposEstruturados ? parsed.sexo : animal.sexo,
+    pelagem: precisaExtrairCamposEstruturados ? parsed.pelagem : animal.pelagem,
+    nascimento: precisaExtrairCamposEstruturados ? parsed.nascimento : animal.nascimento,
+    altura: precisaExtrairCamposEstruturados ? parsed.altura : animal.altura,
     condicoesTexto: animal.condicoes_cobertura.join('\n'),
     baseAtualizadoEm: animal.atualizado_em,
     conflitoExterno: false
@@ -177,12 +185,6 @@ function validarLote(lote: string) {
   if (!match) return 'O lote deve começar com número'
   if (match[1].length < 2) return 'O lote deve ter pelo menos dois dígitos no início'
   return ''
-}
-
-function atualizarCampo<K extends keyof LinhaEdicaoRapida>(id: string, campo: K, valor: LinhaEdicaoRapida[K]) {
-  const linha = linhas.value.find((item) => item.id === id)
-  if (!linha) return
-  ;(linha[campo] as LinhaEdicaoRapida[K]) = valor
 }
 
 async function focarAnimalInicial() {
@@ -369,7 +371,8 @@ async function salvarTudo() {
             raca: linha.raca,
             sexo: linha.sexo,
             pelagem: linha.pelagem,
-            nascimento: linha.nascimento
+            nascimento: linha.nascimento,
+            altura: linha.altura
           })
         : linha.informacoes
 
@@ -384,6 +387,7 @@ async function salvarTudo() {
       sexo: linha.sexo,
       pelagem: linha.pelagem,
       nascimento: linha.nascimento,
+      altura: linha.altura,
       informacoes,
       genealogia: linha.genealogia,
       condicoes_cobertura: condicoes
@@ -529,17 +533,11 @@ onUnmounted(() => {
                   Lote
                 </div>
                 <input
-                  :value="linha.lote"
+                  v-model="linha.lote"
                   class="campo-grid w-full px-2 text-center"
                   type="text"
                   maxlength="4"
-                  @input="
-                    atualizarCampo(
-                      linha.id,
-                      'lote',
-                      normalizarTexto(($event.target as HTMLInputElement).value)
-                    )
-                  "
+                  @input="linha.lote = normalizarTexto(linha.lote)"
                 />
               </div>
 
@@ -548,91 +546,77 @@ onUnmounted(() => {
                   Nome
                 </div>
                 <input
-                  :value="linha.nome"
+                  v-model="linha.nome"
                   class="campo-grid w-full"
                   type="text"
-                  @input="
-                    atualizarCampo(
-                      linha.id,
-                      'nome',
-                      normalizarTexto(($event.target as HTMLInputElement).value)
-                    )
-                  "
+                  @input="linha.nome = normalizarTexto(linha.nome)"
                 />
               </div>
             </div>
 
-            <div v-if="layoutModo === 'SEPARADAS'" class="grid grid-cols-1 gap-4 sm:grid-cols-2">
-              <div>
-                <div class="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
-                  Raça
+            <div v-if="layoutModo === 'SEPARADAS'" class="space-y-4">
+              <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div>
+                  <div class="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                    Raça
+                  </div>
+                  <input
+                    v-model="linha.raca"
+                    class="campo-grid w-full"
+                    type="text"
+                    @input="linha.raca = normalizarTexto(linha.raca)"
+                  />
                 </div>
-                <input
-                  :value="linha.raca"
-                  class="campo-grid w-full"
-                  type="text"
-                  @input="
-                    atualizarCampo(
-                      linha.id,
-                      'raca',
-                      normalizarTexto(($event.target as HTMLInputElement).value)
-                    )
-                  "
-                />
+
+                <div>
+                  <div class="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                    Pelagem
+                  </div>
+                  <input
+                    v-model="linha.pelagem"
+                    class="campo-grid w-full"
+                    type="text"
+                    @input="linha.pelagem = normalizarTexto(linha.pelagem)"
+                  />
+                </div>
               </div>
 
-              <div>
-                <div class="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
-                  Sexo
+              <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
+                <div>
+                  <div class="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                    Sexo
+                  </div>
+                  <input
+                    v-model="linha.sexo"
+                    class="campo-grid w-full"
+                    type="text"
+                    @input="linha.sexo = normalizarTexto(linha.sexo)"
+                  />
                 </div>
-                <input
-                  :value="linha.sexo"
-                  class="campo-grid w-full"
-                  type="text"
-                  @input="
-                    atualizarCampo(
-                      linha.id,
-                      'sexo',
-                      normalizarTexto(($event.target as HTMLInputElement).value)
-                    )
-                  "
-                />
-              </div>
 
-              <div>
-                <div class="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
-                  Pelagem
+                <div>
+                  <div class="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                    Nascimento
+                  </div>
+                  <input
+                    v-model="linha.nascimento"
+                    class="campo-grid w-full"
+                    type="text"
+                    @input="linha.nascimento = normalizarTexto(linha.nascimento)"
+                  />
                 </div>
-                <input
-                  :value="linha.pelagem"
-                  class="campo-grid w-full"
-                  type="text"
-                  @input="
-                    atualizarCampo(
-                      linha.id,
-                      'pelagem',
-                      normalizarTexto(($event.target as HTMLInputElement).value)
-                    )
-                  "
-                />
-              </div>
 
-              <div>
-                <div class="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
-                  Nascimento
+                <div>
+                  <div class="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                    Altura
+                  </div>
+                  <input
+                    v-model="linha.altura"
+                    class="campo-grid w-full"
+                    type="text"
+                    @input="linha.altura = normalizarTexto(linha.altura)"
+                  />
                 </div>
-                <input
-                  :value="linha.nascimento"
-                  class="campo-grid w-full"
-                  type="text"
-                  @input="
-                    atualizarCampo(
-                      linha.id,
-                      'nascimento',
-                      normalizarTexto(($event.target as HTMLInputElement).value)
-                    )
-                  "
-                />
               </div>
             </div>
 
@@ -641,16 +625,10 @@ onUnmounted(() => {
                 Informações
               </div>
               <input
-                :value="linha.informacoes"
+                v-model="linha.informacoes"
                 class="campo-grid w-full"
                 type="text"
-                @input="
-                  atualizarCampo(
-                    linha.id,
-                    'informacoes',
-                    normalizarTexto(($event.target as HTMLInputElement).value)
-                  )
-                "
+                @input="linha.informacoes = normalizarTexto(linha.informacoes)"
               />
             </div>
 
@@ -659,16 +637,10 @@ onUnmounted(() => {
                 Genealogia
               </div>
               <input
-                :value="linha.genealogia"
+                v-model="linha.genealogia"
                 class="campo-grid w-full"
                 type="text"
-                @input="
-                  atualizarCampo(
-                    linha.id,
-                    'genealogia',
-                    normalizarTexto(($event.target as HTMLInputElement).value)
-                  )
-                "
+                @input="linha.genealogia = normalizarTexto(linha.genealogia)"
               />
             </div>
 
@@ -678,16 +650,10 @@ onUnmounted(() => {
                   Vendedor
                 </div>
                 <input
-                  :value="linha.vendedor"
+                  v-model="linha.vendedor"
                   class="campo-grid w-full"
                   type="text"
-                  @input="
-                    atualizarCampo(
-                      linha.id,
-                      'vendedor',
-                      normalizarTexto(($event.target as HTMLInputElement).value)
-                    )
-                  "
+                  @input="linha.vendedor = normalizarTexto(linha.vendedor)"
                 />
               </div>
 
@@ -696,14 +662,12 @@ onUnmounted(() => {
                   Condições Específicas
                 </div>
                 <input
-                  :value="linha.condicoes_pagamento_especificas"
+                  v-model="linha.condicoes_pagamento_especificas"
                   class="campo-grid w-full"
                   type="text"
                   @input="
-                    atualizarCampo(
-                      linha.id,
-                      'condicoes_pagamento_especificas',
-                      normalizarTexto(($event.target as HTMLInputElement).value)
+                    linha.condicoes_pagamento_especificas = normalizarTexto(
+                      linha.condicoes_pagamento_especificas
                     )
                   "
                 />
@@ -715,16 +679,10 @@ onUnmounted(() => {
                 Pacotes disponíveis
               </div>
               <input
-                :value="linha.condicoesTexto"
+                v-model="linha.condicoesTexto"
                 class="campo-grid w-full"
                 type="text"
-                @input="
-                  atualizarCampo(
-                    linha.id,
-                    'condicoesTexto',
-                    normalizarTexto(($event.target as HTMLInputElement).value)
-                  )
-                "
+                @input="linha.condicoesTexto = normalizarTexto(linha.condicoesTexto)"
               />
             </div>
           </div>
@@ -779,3 +737,5 @@ onUnmounted(() => {
 }
 
 </style>
+
+

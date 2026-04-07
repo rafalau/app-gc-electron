@@ -23,7 +23,6 @@ import {
 import { obterLeilao } from '../services/leiloes.service'
 import { obterApiImportProviders } from '../services/config.service'
 import { obterConexaoOperacao } from '../services/operacao.service'
-import { formatarInformacoesParaExibicao } from '../utils/animalInformacoes'
 
 export type ModalAnimalModo = 'CRIAR' | 'EDITAR'
 export type LayoutInformacoesAnimais = 'AGREGADAS' | 'SEPARADAS'
@@ -58,6 +57,7 @@ function criarFormVazio(leilaoId: string): AnimalCriarPayload {
     sexo: '',
     pelagem: '',
     nascimento: '',
+    altura: '',
     informacoes: '',
     genealogia: '',
     condicoes_cobertura: []
@@ -242,7 +242,8 @@ export function useAnimais(leilaoId: string) {
       sexo: animal.sexo,
       pelagem: animal.pelagem,
       nascimento: animal.nascimento,
-      informacoes: formatarInformacoesParaExibicao(animal.informacoes),
+      altura: animal.altura,
+      informacoes: animal.informacoes,
       genealogia: animal.genealogia,
       condicoes_cobertura: [...animal.condicoes_cobertura]
     }
@@ -376,6 +377,7 @@ export function useAnimais(leilaoId: string) {
         sexo: payloadNormalizado.sexo,
         pelagem: payloadNormalizado.pelagem,
         nascimento: payloadNormalizado.nascimento,
+        altura: payloadNormalizado.altura,
         informacoes: payloadNormalizado.informacoes,
         genealogia: payloadNormalizado.genealogia,
         condicoes_cobertura: payloadNormalizado.condicoes_cobertura

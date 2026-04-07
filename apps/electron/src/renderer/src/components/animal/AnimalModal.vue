@@ -39,6 +39,7 @@ const formLocal = reactive<AnimalCriarPayload>({
   sexo: '',
   pelagem: '',
   nascimento: '',
+  altura: '',
   informacoes: '',
   genealogia: '',
   condicoes_cobertura: []
@@ -62,16 +63,25 @@ function sincronizarForm() {
   formLocal.sexo = props.form.sexo
   formLocal.pelagem = props.form.pelagem
   formLocal.nascimento = props.form.nascimento
+  formLocal.altura = props.form.altura
   formLocal.informacoes = props.form.informacoes
   formLocal.genealogia = props.form.genealogia
   formLocal.condicoes_cobertura = [...props.form.condicoes_cobertura]
 
-  if (props.layoutModo === 'SEPARADAS') {
+  if (
+    props.layoutModo === 'SEPARADAS' &&
+    !formLocal.raca &&
+    !formLocal.sexo &&
+    !formLocal.pelagem &&
+    !formLocal.nascimento &&
+    !formLocal.altura
+  ) {
     const parsed = parseInformacoesAgregadas(props.form.informacoes)
-    formLocal.raca = formLocal.raca || parsed.raca
-    formLocal.sexo = formLocal.sexo || parsed.sexo
-    formLocal.pelagem = formLocal.pelagem || parsed.pelagem
-    formLocal.nascimento = formLocal.nascimento || parsed.nascimento
+    formLocal.raca = parsed.raca
+    formLocal.sexo = parsed.sexo
+    formLocal.pelagem = parsed.pelagem
+    formLocal.nascimento = parsed.nascimento
+    formLocal.altura = parsed.altura
   }
 
   novaCondicao.value = ''
@@ -101,7 +111,8 @@ function salvar() {
           raca: formLocal.raca,
           sexo: formLocal.sexo,
           pelagem: formLocal.pelagem,
-          nascimento: formLocal.nascimento
+          nascimento: formLocal.nascimento,
+          altura: formLocal.altura
         })
       : formLocal.informacoes
 
@@ -157,6 +168,7 @@ async function importarStudbook(registro: string) {
       formLocal.sexo = parsed.sexo
       formLocal.pelagem = parsed.pelagem
       formLocal.nascimento = parsed.nascimento
+      formLocal.altura = parsed.altura
     }
     studbookAberto.value = false
   } catch (error) {
@@ -308,52 +320,68 @@ async function importarStudbook(registro: string) {
       </div>
 
       <template v-else>
-        <div class="col-span-12 md:col-span-3">
-          <label class="block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500 mb-2">
-            Raça
-          </label>
-          <input
-            v-model="formLocal.raca"
-            class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800 shadow-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100"
-            type="text"
-            @input="applyUppercaseInput($event, (value) => (formLocal.raca = value))"
-          />
+        <div class="col-span-12 grid grid-cols-1 gap-5 md:grid-cols-2">
+          <div>
+            <label class="block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500 mb-2">
+              Raça
+            </label>
+            <input
+              v-model="formLocal.raca"
+              class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800 shadow-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100"
+              type="text"
+              @input="applyUppercaseInput($event, (value) => (formLocal.raca = value))"
+            />
+          </div>
+
+          <div>
+            <label class="block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500 mb-2">
+              Pelagem
+            </label>
+            <input
+              v-model="formLocal.pelagem"
+              class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800 shadow-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100"
+              type="text"
+              @input="applyUppercaseInput($event, (value) => (formLocal.pelagem = value))"
+            />
+          </div>
         </div>
 
-        <div class="col-span-12 md:col-span-3">
-          <label class="block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500 mb-2">
-            Sexo
-          </label>
-          <input
-            v-model="formLocal.sexo"
-            class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800 shadow-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100"
-            type="text"
-            @input="applyUppercaseInput($event, (value) => (formLocal.sexo = value))"
-          />
-        </div>
+        <div class="col-span-12 grid grid-cols-1 gap-5 md:grid-cols-3">
+          <div>
+            <label class="block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500 mb-2">
+              Sexo
+            </label>
+            <input
+              v-model="formLocal.sexo"
+              class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800 shadow-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100"
+              type="text"
+              @input="applyUppercaseInput($event, (value) => (formLocal.sexo = value))"
+            />
+          </div>
 
-        <div class="col-span-12 md:col-span-3">
-          <label class="block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500 mb-2">
-            Pelagem
-          </label>
-          <input
-            v-model="formLocal.pelagem"
-            class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800 shadow-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100"
-            type="text"
-            @input="applyUppercaseInput($event, (value) => (formLocal.pelagem = value))"
-          />
-        </div>
+          <div>
+            <label class="block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500 mb-2">
+              Nascimento
+            </label>
+            <input
+              v-model="formLocal.nascimento"
+              class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800 shadow-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100"
+              type="text"
+              @input="applyUppercaseInput($event, (value) => (formLocal.nascimento = value))"
+            />
+          </div>
 
-        <div class="col-span-12 md:col-span-3">
-          <label class="block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500 mb-2">
-            Nascimento
-          </label>
-          <input
-            v-model="formLocal.nascimento"
-            class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800 shadow-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100"
-            type="text"
-            @input="applyUppercaseInput($event, (value) => (formLocal.nascimento = value))"
-          />
+          <div>
+            <label class="block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500 mb-2">
+              Altura
+            </label>
+            <input
+              v-model="formLocal.altura"
+              class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800 shadow-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100"
+              type="text"
+              @input="applyUppercaseInput($event, (value) => (formLocal.altura = value))"
+            />
+          </div>
         </div>
       </template>
 
@@ -453,3 +481,7 @@ async function importarStudbook(registro: string) {
   filter: blur(6px);
 }
 </style>
+
+
+
+

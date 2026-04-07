@@ -49,6 +49,7 @@ type AnimalPayload = {
   sexo: string
   pelagem: string
   nascimento: string
+  altura: string
   informacoes: string
   genealogia: string
   condicoes_cobertura: string[]
@@ -380,41 +381,53 @@ function parseInformacoesAgregadas(informacoes: string) {
   const partesBrutas = String(informacoes ?? '')
     .split('|')
     .map((parte) => parte.trim())
-  const possuiLayoutEstruturado =
-    partesBrutas.length >= 4 || (partesBrutas.length > 1 && partesBrutas.some((parte) => parte === ''))
+  let altura = ''
+  const partes = partesBrutas.filter(Boolean).filter((parte) => {
+    const matchAltura = parte.match(/^ALTURA\s*:\s*(.+)$/i)
+    if (matchAltura) {
+      altura = matchAltura[1].trim()
+      return false
+    }
 
-  if (possuiLayoutEstruturado) {
-    const [raca = '', sexo = '', pelagem = '', ...resto] = partesBrutas
+    return !/^(INFO|LOCAL|CIDADE(?:\/UF)?|UF)\s*:/i.test(parte)
+  })
+
+  if (partesBrutas.length >= 4 || (partesBrutas.length > 1 && partesBrutas.some((parte) => parte === ''))) {
+    const [raca = '', sexo = '', pelagem = '', nascimento = '', alturaPosicional = ''] = partesBrutas
     return {
       raca,
       sexo,
       pelagem,
-      nascimento: resto.join(' | ').trim()
+      nascimento,
+      altura: altura || alturaPosicional.trim()
     }
   }
 
-  const partes = partesBrutas.filter(Boolean)
+  if (partes.length >= 5) {
+    const [raca, sexo, pelagem, nascimento, alturaPosicional] = partes
+    return { raca, sexo, pelagem, nascimento, altura: altura || alturaPosicional }
+  }
 
-  if (partes.length >= 4) {
-    const [raca, sexo, pelagem, ...resto] = partes
-    return { raca, sexo, pelagem, nascimento: resto.join(' | ').trim() }
+  if (partes.length === 4) {
+    const [raca, sexo, pelagem, nascimento] = partes
+    return { raca, sexo, pelagem, nascimento, altura }
   }
 
   if (partes.length === 3) {
     const [sexo, pelagem, nascimento] = partes
-    return { raca: '', sexo, pelagem, nascimento }
+    return { raca: '', sexo, pelagem, nascimento, altura }
   }
 
   if (partes.length === 2) {
     const [sexo, pelagem] = partes
-    return { raca: '', sexo, pelagem, nascimento: '' }
+    return { raca: '', sexo, pelagem, nascimento: '', altura }
   }
 
   if (partes.length === 1) {
-    return { raca: '', sexo: partes[0], pelagem: '', nascimento: '' }
+    return { raca: '', sexo: partes[0], pelagem: '', nascimento: '', altura }
   }
 
-  return { raca: '', sexo: '', pelagem: '', nascimento: '' }
+  return { raca: '', sexo: '', pelagem: '', nascimento: '', altura: '' }
 }
 
 function formatarInformacoesParaExibicao(informacoes: string) {
@@ -427,6 +440,7 @@ function formatarInformacoesParaExibicao(informacoes: string) {
 
 function serializarAnimal(animal: any): AnimalPayload | null {
   if (!animal) return null
+  const parsedInformacoes = parseInformacoesAgregadas(animal.informacoes ?? '')
 
   let condicoesCobertura: string[] = []
   try {
@@ -444,6 +458,7 @@ function serializarAnimal(animal: any): AnimalPayload | null {
     sexo: animal.sexo ?? '',
     pelagem: animal.pelagem ?? '',
     nascimento: animal.nascimento ?? '',
+    altura: parsedInformacoes.altura,
     condicoes_cobertura: condicoesCobertura,
     criado_em: animal.criado_em instanceof Date ? animal.criado_em.toISOString() : animal.criado_em,
     atualizado_em:
@@ -523,6 +538,7 @@ async function montarJsonOperacao(leilaoId: string) {
       SEXO: animal?.sexo || parsed.sexo || '',
       PELAGEM: animal?.pelagem || parsed.pelagem || '',
       NASCIMENTO: animal?.nascimento || parsed.nascimento || '',
+      ALTURA: animal?.altura || parsed.altura || '',
       GENEALOGIA: animal?.genealogia ?? '',
       VENDEDOR: animal?.vendedor ?? '',
       PACOTES_COBERTURAS:

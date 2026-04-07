@@ -19,6 +19,7 @@ type AnimalCriarPayload = {
   sexo: string
   pelagem: string
   nascimento: string
+  altura: string
   informacoes: string
   genealogia: string
   condicoes_cobertura: string[]
@@ -55,6 +56,7 @@ function normalizarPayloadCriar(payload: AnimalCriarPayload): AnimalCriarPayload
     sexo: upper(payload.sexo),
     pelagem: upper(payload.pelagem),
     nascimento: upper(payload.nascimento),
+    altura: upper(payload.altura),
     informacoes: upper(payload.informacoes),
     genealogia: upper(payload.genealogia),
     condicoes_cobertura: upperList(payload.condicoes_cobertura)
@@ -75,6 +77,7 @@ function normalizarPayloadAtualizar(payload: AnimalAtualizarPayload): AnimalAtua
     ...(payload.sexo !== undefined ? { sexo: upper(payload.sexo) } : {}),
     ...(payload.pelagem !== undefined ? { pelagem: upper(payload.pelagem) } : {}),
     ...(payload.nascimento !== undefined ? { nascimento: upper(payload.nascimento) } : {}),
+    ...(payload.altura !== undefined ? { altura: upper(payload.altura) } : {}),
     ...(payload.informacoes !== undefined ? { informacoes: upper(payload.informacoes) } : {}),
     ...(payload.genealogia !== undefined ? { genealogia: upper(payload.genealogia) } : {}),
     ...(payload.condicoes_cobertura !== undefined
@@ -96,6 +99,35 @@ function splitLote(lote: string) {
         numero: numerica ? BigInt(parte) : null
       }
     }) ?? [{ valor: lote.trim().toUpperCase(), numerica: false, numero: null }]
+}
+
+function parseInformacoesAgregadas(informacoes: string) {
+  const partesBrutas = String(informacoes ?? '')
+    .split('|')
+    .map((parte) => parte.trim())
+  let altura = ''
+  const partes = partesBrutas.filter(Boolean).filter((parte) => {
+    const matchAltura = parte.match(/^ALTURA\s*:\s*(.+)$/i)
+    if (matchAltura) {
+      altura = matchAltura[1].trim()
+      return false
+    }
+
+    return !/^(INFO|LOCAL|CIDADE(?:\/UF)?|UF)\s*:/i.test(parte)
+  })
+
+  if (partesBrutas.length >= 4 || (partesBrutas.length > 1 && partesBrutas.some((parte) => parte === ''))) {
+    const [, , , , alturaPosicional = ''] = partesBrutas
+    return {
+      altura: altura || alturaPosicional.trim()
+    }
+  }
+
+  if (partes.length >= 5) {
+    return { altura: altura || partes[4] }
+  }
+
+  return { altura }
 }
 
 function compararLote(a: string, b: string) {
@@ -129,6 +161,7 @@ function compararLote(a: string, b: string) {
 }
 
 function serializar(animal: any) {
+  const parsedInformacoes = parseInformacoesAgregadas(animal.informacoes ?? '')
   let condicoesCobertura: string[] = []
   try {
     const parsed = JSON.parse(animal.condicoes_cobertura ?? '[]')
@@ -145,6 +178,7 @@ function serializar(animal: any) {
     sexo: animal.sexo ?? '',
     pelagem: animal.pelagem ?? '',
     nascimento: animal.nascimento ?? '',
+    altura: parsedInformacoes.altura,
     condicoes_cobertura: condicoesCobertura,
     criado_em: animal.criado_em instanceof Date ? animal.criado_em.toISOString() : animal.criado_em,
     atualizado_em:

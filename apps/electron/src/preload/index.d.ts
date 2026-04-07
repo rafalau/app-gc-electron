@@ -36,6 +36,7 @@ export type Animal = {
   sexo: string
   pelagem: string
   nascimento: string
+  altura: string
   informacoes: string
   genealogia: string
   condicoes_cobertura: string[]
@@ -54,6 +55,7 @@ export type AnimalCriarPayload = {
   sexo: string
   pelagem: string
   nascimento: string
+  altura: string
   informacoes: string
   genealogia: string
   condicoes_cobertura: string[]
