@@ -12,8 +12,10 @@ export type AnimalImportInput = {
   altura?: string
   pai?: string
   mae?: string
+  avo_materno?: string
   cidade?: string
   uf?: string
+  cidade_uf?: string
   vendedor?: string
   informacoes: string
   genealogia: string
@@ -46,7 +48,11 @@ const headerAliases: Record<string, keyof AnimalImportInput> = {
   altura: 'altura',
   pai: 'pai',
   mae: 'mae',
+  avo3: 'avo_materno',
+  ped05: 'avo_materno',
+  avomaterno: 'avo_materno',
   cidade: 'cidade',
+  cidadeuf: 'cidade_uf',
   municipio: 'cidade',
   uf: 'uf',
   estado: 'uf',
@@ -74,6 +80,58 @@ function joinNonEmpty(parts: Array<string | undefined>, separator: string) {
   return parts.map((item) => normalizeString(item)).filter(Boolean).join(separator)
 }
 
+function normalizeCidadeUf(value: string) {
+  const normalized = normalizeString(value).toUpperCase()
+  if (!normalized) return ''
+
+  const collapsed = normalized.replace(/\s+/g, ' ').trim()
+  const slashMatch = collapsed.match(/^(.+?)\s*\/\s*([A-Z]{2})$/)
+  if (slashMatch) {
+    return `${slashMatch[1].trim()}/${slashMatch[2].trim()}`
+  }
+
+  const dashMatch = collapsed.match(/^(.+?)\s*-\s*([A-Z]{2})$/)
+  if (dashMatch) {
+    return `${dashMatch[1].trim()}/${dashMatch[2].trim()}`
+  }
+
+  return collapsed
+}
+
+function buildVendedorLabel(input: AnimalImportInput) {
+  const vendedor = normalizeString(input.vendedor).toUpperCase()
+  const cidade = normalizeString(input.cidade).toUpperCase()
+  const uf = normalizeString(input.uf).toUpperCase()
+  const cidadeUf = normalizeCidadeUf(input.cidade_uf ?? '')
+  const local = cidadeUf || joinNonEmpty([cidade, uf], '/')
+
+  if (vendedor.startsWith('VENDEDOR:') || vendedor.startsWith('ALOJAMENTO:')) {
+    return vendedor
+  }
+
+  if (vendedor) {
+    return `VENDEDOR: ${joinNonEmpty([vendedor, local], ' - ')}`
+  }
+
+  if (local) {
+    return `ALOJAMENTO: ${local}`
+  }
+
+  return ''
+}
+
+function buildGenealogia(input: AnimalImportInput) {
+  const genealogia = normalizeString(input.genealogia).toUpperCase()
+  if (genealogia) return genealogia
+
+  const pai = normalizeString(input.pai).toUpperCase()
+  const mae = normalizeString(input.mae).toUpperCase()
+  const avoMaterno = normalizeString(input.avo_materno).toUpperCase()
+  const base = joinNonEmpty([pai, mae], '   X   ')
+
+  return `${base}${avoMaterno ? `   (${avoMaterno})` : ''}`.trim()
+}
+
 function normalizeInput(input: AnimalImportInput, options: ImportAnimaisOptions = {}): AnimalImportInput {
   const raca = normalizeString(input.raca).toUpperCase()
   const sexo = normalizeString(input.sexo).toUpperCase()
@@ -82,17 +140,12 @@ function normalizeInput(input: AnimalImportInput, options: ImportAnimaisOptions 
   const altura = normalizeString(input.altura).toUpperCase()
   const pai = normalizeString(input.pai).toUpperCase()
   const mae = normalizeString(input.mae).toUpperCase()
+  const avo_materno = normalizeString(input.avo_materno).toUpperCase()
   const cidade = normalizeString(input.cidade).toUpperCase()
   const uf = normalizeString(input.uf).toUpperCase()
-  const vendedor = normalizeString(input.vendedor).toUpperCase()
+  const cidade_uf = normalizeCidadeUf(input.cidade_uf ?? '')
   const informacoes = normalizeString(input.informacoes).toUpperCase()
-  const local = joinNonEmpty([cidade, uf], '/')
-  const genealogia = normalizeString(input.genealogia).toUpperCase() || joinNonEmpty([pai, mae], '   X   ')
-  const vendedorComLocal = vendedor
-    ? `VENDEDOR: ${joinNonEmpty([vendedor, local], ' - ')}`
-    : local
-      ? `LOCALIZAÇÃO: ${local}`
-      : ''
+  const genealogia = buildGenealogia(input)
 
   return {
     lote: normalizeString(input.lote).toUpperCase(),
@@ -104,9 +157,11 @@ function normalizeInput(input: AnimalImportInput, options: ImportAnimaisOptions 
     altura,
     pai,
     mae,
+    avo_materno,
     cidade,
     uf,
-    vendedor: vendedorComLocal,
+    cidade_uf,
+    vendedor: buildVendedorLabel(input),
     informacoes: [
       options.incluirRacaNasInformacoes ? raca : '',
       sexo,
@@ -120,9 +175,7 @@ function normalizeInput(input: AnimalImportInput, options: ImportAnimaisOptions 
     genealogia,
     categoria: normalizeString(input.categoria || 'ANIMAIS').toUpperCase(),
     condicoes_cobertura: Array.isArray(input.condicoes_cobertura)
-      ? input.condicoes_cobertura
-          .map((item) => normalizeString(item).toUpperCase())
-          .filter(Boolean)
+      ? input.condicoes_cobertura.map((item) => normalizeString(item).toUpperCase()).filter(Boolean)
       : []
   }
 }
@@ -177,7 +230,7 @@ export async function importAnimais(
 
       if (!input.lote || !input.nome) {
         summary.invalid += 1
-        summary.errors.push(`Linha ${index + 1}: lote e nome são obrigatórios.`)
+        summary.errors.push(`Linha ${index + 1}: lote e nome sao obrigatorios.`)
         continue
       }
 
@@ -233,19 +286,22 @@ export async function importAnimais(
         continue
       }
 
-      const existingComparable = normalizeInput({
-        lote: existing.lote,
-        nome: existing.nome,
-        categoria: existing.categoria,
-        raca: existing.raca,
-        sexo: existing.sexo,
-        pelagem: existing.pelagem,
-        nascimento: existing.nascimento,
-        vendedor: existing.proprietario,
-        informacoes: existing.informacoes,
-        genealogia: existing.genealogia,
-        condicoes_cobertura: JSON.parse(existing.condicoes_cobertura ?? '[]')
-      }, options)
+      const existingComparable = normalizeInput(
+        {
+          lote: existing.lote,
+          nome: existing.nome,
+          categoria: existing.categoria,
+          raca: existing.raca,
+          sexo: existing.sexo,
+          pelagem: existing.pelagem,
+          nascimento: existing.nascimento,
+          vendedor: existing.proprietario,
+          informacoes: existing.informacoes,
+          genealogia: existing.genealogia,
+          condicoes_cobertura: JSON.parse(existing.condicoes_cobertura ?? '[]')
+        },
+        options
+      )
 
       if (isSameAnimal(existingComparable, input)) {
         summary.skipped += 1
@@ -304,7 +360,7 @@ export async function importAnimaisFromWorkbook(
   const sheetName = workbook.SheetNames[0]
 
   if (!sheetName) {
-    throw new Error('A planilha não possui abas válidas.')
+    throw new Error('A planilha nao possui abas validas.')
   }
 
   const rows = XLSX.utils.sheet_to_json<Record<string, unknown>>(workbook.Sheets[sheetName], {

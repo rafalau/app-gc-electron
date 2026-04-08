@@ -48,19 +48,15 @@ function getAuctionAnimalLote(animal: TbsAuctionAnimal) {
 
 function getAuctionAnimalVendedor(animal: TbsAuctionAnimal) {
   const direct = upper(animal.vendedor)
-  const cidade = upper(animal.cidade_alojamento)
-
-  if (direct) {
-    return cidade ? `${direct} - ${cidade}` : direct
-  }
+  if (direct) return direct
 
   for (const [key, value] of Object.entries(animal)) {
     if (!key.toLowerCase().includes('vendedor')) continue
     const normalized = upper(typeof value === 'string' ? value : null)
-    if (normalized) return cidade ? `${normalized} - ${cidade}` : normalized
+    if (normalized) return normalized
   }
 
-  return cidade ? `ALOJAMENTO: ${cidade}` : ''
+  return ''
 }
 
 function asAuctionOption(auction: TbsAuctionResponse): TbsAuctionOption {
@@ -83,6 +79,7 @@ function toAnimalInput(animal: TbsAuctionAnimal): AnimalImportInput {
     nascimento: String(animal.nascimento ?? '').trim().toUpperCase(),
     categoria: 'ANIMAIS',
     vendedor: getAuctionAnimalVendedor(animal),
+    cidade_uf: upper(animal.cidade_alojamento),
     informacoes: joinNonEmpty(
       [
         animal.altura ? `ALTURA: ${upper(animal.altura)}` : '',
