@@ -41,7 +41,16 @@ function upperList(values?: string[] | null) {
 function normalizeVendedor(value?: string | null) {
   const texto = upper(value)
   if (!texto) return ''
-  return texto.startsWith('VENDEDOR:') ? texto : `VENDEDOR: ${texto}`
+  if (
+    texto.startsWith('VENDEDOR:') ||
+    texto.startsWith('ALOJAMENTO:') ||
+    texto.startsWith('LOCALIZACAO:') ||
+    texto.startsWith('LOCALIZAÇÃO:')
+  ) {
+    return texto
+  }
+
+  return `VENDEDOR: ${texto}`
 }
 
 function normalizarPayloadCriar(payload: AnimalCriarPayload): AnimalCriarPayload {

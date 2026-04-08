@@ -253,6 +253,9 @@ declare global {
     janela: {
       definirPreset: (preset: 'DESKTOP' | 'OPERACAO') => Promise<void>
       abrirEdicaoRapida: (leilaoId: string, animalId?: string) => Promise<void>
+      abrirEditorLeilaoOperacao: (leilaoId: string) => Promise<void>
+      abrirEditorAnimalOperacao: (leilaoId: string, animalId: string) => Promise<void>
+      abrirConfiguracaoVmixOperacao: (leilaoId: string) => Promise<void>
     }
     srtPlayer: {
       prepare: () => Promise<{ ok: boolean }>

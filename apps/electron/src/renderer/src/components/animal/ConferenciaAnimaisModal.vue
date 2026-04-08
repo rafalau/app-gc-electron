@@ -3,6 +3,7 @@ import BaseModal from '../ui/BaseModal.vue'
 import BaseButton from '../ui/BaseButton.vue'
 import type { Animal } from '@renderer/types/animal'
 import {
+  formatarGenealogiaParaExibicao,
   formatarInformacoesParaExibicao,
   parseInformacoesAgregadas
 } from '@renderer/utils/animalInformacoes'
@@ -31,6 +32,10 @@ function getCondicoesEspecificas(animal: Animal) {
 
 function getInformacoes(animal: Animal) {
   return formatarInformacoesParaExibicao(animal.informacoes)
+}
+
+function getGenealogia(animal: Animal) {
+  return formatarGenealogiaParaExibicao(animal.genealogia)
 }
 </script>
 
@@ -111,7 +116,7 @@ function getInformacoes(animal: Animal) {
               Genealogia
             </div>
             <div class="mt-1 break-words">
-              {{ animal.genealogia || 'Sem genealogia' }}
+              {{ getGenealogia(animal) || 'Sem genealogia' }}
             </div>
           </div>
 

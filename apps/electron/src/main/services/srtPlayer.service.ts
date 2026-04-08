@@ -106,6 +106,11 @@ function sendCommand(command: string) {
 
 function getResolvedBounds(bounds: BoundsPayload) {
   if (!parentBrowserWindow) return bounds
+  if (parentBrowserWindow.isDestroyed()) {
+    parentBrowserWindow = null
+    parentWindowId = null
+    return bounds
+  }
 
   if (process.platform === 'win32') {
     return {

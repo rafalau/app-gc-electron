@@ -243,7 +243,13 @@ if (process.contextIsolated) {
       definirPreset: (preset: 'DESKTOP' | 'OPERACAO') =>
         ipcRenderer.invoke('janela:definirPreset', preset),
       abrirEdicaoRapida: (leilaoId: string, animalId?: string) =>
-        ipcRenderer.invoke('janela:abrirEdicaoRapida', leilaoId, animalId)
+        ipcRenderer.invoke('janela:abrirEdicaoRapida', leilaoId, animalId),
+      abrirEditorLeilaoOperacao: (leilaoId: string) =>
+        ipcRenderer.invoke('janela:abrirEditorLeilaoOperacao', leilaoId),
+      abrirEditorAnimalOperacao: (leilaoId: string, animalId: string) =>
+        ipcRenderer.invoke('janela:abrirEditorAnimalOperacao', leilaoId, animalId),
+      abrirConfiguracaoVmixOperacao: (leilaoId: string) =>
+        ipcRenderer.invoke('janela:abrirConfiguracaoVmixOperacao', leilaoId)
     })
 
     contextBridge.exposeInMainWorld('srtPlayer', {

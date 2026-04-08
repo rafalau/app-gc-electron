@@ -1,14 +1,10 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
-import BaseButton from '@renderer/components/ui/BaseButton.vue'
-import AnimalModal from '@renderer/components/animal/AnimalModal.vue'
-import BaseModal from '@renderer/components/ui/BaseModal.vue'
-import BaseSwitch from '@renderer/components/ui/BaseSwitch.vue'
 import { useAnimais } from '@renderer/composables/useAnimais'
-import type { LeilaoCriarPayload } from '@renderer/types/leilao'
 import { applyUppercaseInput } from '@renderer/utils/uppercaseInput'
 import {
+  formatarGenealogiaParaExibicao,
   formatarInformacoesParaExibicao,
   parseInformacoesAgregadas
 } from '@renderer/utils/animalInformacoes'
@@ -35,16 +31,13 @@ import {
 } from '@renderer/services/srtPlayer.service'
 import {
   acionarOverlayVmix,
-  listarInputsVmix,
-  obterConfiguracaoVmix,
-  salvarConfiguracaoVmix
+  obterConfiguracaoVmix
 } from '@renderer/services/config.service'
-import { atualizarLeilao } from '@renderer/services/leiloes.service'
-import type { VmixConfig, VmixInput } from '@renderer/types/config'
+import type { VmixConfig } from '@renderer/types/config'
 
-const HOST_DEFAULT_IP = '127.0.0.1'
 const VMIX_DEFAULT_PORT = 8088
 const SRT_DEFAULT_PORT = 9001
+const SRT_RECONNECT_MAX_TENTATIVAS = 10
 const INTERVALO_COMPOSTO_PADRAO = 10
 const AJUSTES_LANCE_RAPIDO = [10, 20, 30, 50, 100, 500] as const
 
@@ -57,14 +50,7 @@ const {
   carregando,
   leilao,
   animais,
-  modalAberto,
-  modalModo,
-  form,
-  erroModal,
-  layoutInformacoesModo,
-  abrirEditar,
-  fecharModal,
-  salvarModal
+  layoutInformacoesModo
 } = useAnimais(leilaoId)
 
 const arquivoInfo = ref<OperacaoArquivoInfo | null>(null)
@@ -77,16 +63,11 @@ const lanceAtual = ref('0,00')
 const lanceAtualCentavos = ref(0)
 const copiando = ref<'caminho' | ''>('')
 const inputLanceRef = ref<HTMLInputElement | null>(null)
-const modalLeilaoAberto = ref(false)
-const modalConfiguracaoAberto = ref(false)
-const erroLeilaoModal = ref('')
-const erroConfiguracaoModal = ref('')
 const erroOperacao = ref('')
-const erroInputsVmix = ref('')
-const carregandoInputsVmix = ref(false)
 const acionandoOverlayVmix = ref(false)
 const srtPlayerMutado = ref(false)
-const inputsVmix = ref<VmixInput[]>([])
+const recarregandoSrt = ref(false)
+const srtStatus = ref('')
 const seletorAnimalRef = ref<HTMLDivElement | null>(null)
 const srtPlayerHostRef = ref<HTMLDivElement | null>(null)
 const conexaoOperacao = ref<OperacaoConexaoInfo | null>(null)
@@ -98,10 +79,14 @@ let srtResizeObserver: ResizeObserver | null = null
 let srtScrollSyncHandler: (() => void) | null = null
 let srtResizeWindowHandler: (() => void) | null = null
 let operacaoEventSource: EventSource | null = null
+let configVmixEventSource: EventSource | null = null
 let aplicandoEstadoExterno = false
 let ultimaAssinaturaOperacao = ''
 let srtBoundsSyncTimer: number | null = null
 let srtBoundsSyncFrame: number | null = null
+let srtReconnectTimer: number | null = null
+let srtReconnectTentativa = 0
+let srtReconnectToken = 0
 let rotacaoCompostaTimer: number | null = null
 const formVmix = ref<VmixConfig>({
   ativo: false,
@@ -113,15 +98,6 @@ const formVmix = ref<VmixConfig>({
     porta: SRT_DEFAULT_PORT
   }
 })
-const formLeilao = ref<LeilaoCriarPayload>({
-  titulo_evento: '',
-  data: '',
-  condicoes_de_pagamento: '',
-  usa_dolar: false,
-  cotacao: null,
-  multiplicador: 1
-})
-
 const animalSelecionado = computed(
   () => animais.value.find((animal) => animal.id === animalSelecionadoId.value) ?? null
 )
@@ -209,9 +185,6 @@ const srtConfigurado = computed(() => {
       Number.isInteger(Number(formVmix.value.srt.porta)) &&
       Number(formVmix.value.srt.porta) > 0
   )
-})
-const algumModalAberto = computed(() => {
-  return Boolean(modalAberto.value || modalLeilaoAberto.value || modalConfiguracaoAberto.value)
 })
 const endpointSrt = computed(() => {
   if (!srtConfigurado.value) return ''
@@ -360,46 +333,66 @@ async function iniciarRealtimeOperacao() {
   operacaoEventSource = source
 }
 
-async function abrirModalConfiguracao() {
-  erroConfiguracaoModal.value = ''
-  erroInputsVmix.value = ''
-  formVmix.value = await obterConfiguracaoVmix()
-  modalConfiguracaoAberto.value = true
-  await carregarInputsVmix()
-}
+async function iniciarRealtimeConfigVmix() {
+  if (configVmixEventSource) {
+    configVmixEventSource.close()
+    configVmixEventSource = null
+  }
 
-function fecharModalConfiguracao() {
-  modalConfiguracaoAberto.value = false
-  erroConfiguracaoModal.value = ''
-  erroInputsVmix.value = ''
-  focarCampoLance()
-}
+  const conexao = conexaoOperacao.value ?? (await obterConexaoOperacao())
+  const source = new EventSource(
+    `${conexao.baseUrl}/sync/events/${encodeURIComponent('config:vmix')}`
+  )
 
-function restaurarPadroesHostVmix() {
-  formVmix.value = {
-    ...formVmix.value,
-    ip: HOST_DEFAULT_IP,
-    porta: VMIX_DEFAULT_PORT,
-    srt: {
-      ...formVmix.value.srt,
-      porta: SRT_DEFAULT_PORT
+  source.onmessage = async () => {
+    try {
+      formVmix.value = await obterConfiguracaoVmix()
+      await sincronizarPlaybackSrtPlayerComReconexao()
+    } catch (error) {
+      erroOperacao.value = (error as Error).message
     }
   }
-  erroConfiguracaoModal.value = ''
-  erroInputsVmix.value = ''
+
+  source.onerror = () => {
+    if (conexaoOperacao.value?.modo === 'REMOTO') {
+      source.close()
+      configVmixEventSource = null
+    }
+  }
+
+  configVmixEventSource = source
+}
+
+async function abrirModalConfiguracao() {
+  await window.janela.abrirConfiguracaoVmixOperacao(leilaoId)
 }
 
 async function toggleMuteSrtPlayer() {
   srtPlayerMutado.value = !srtPlayerMutado.value
-  await sincronizarPlaybackSrtPlayer()
+  await sincronizarPlaybackSrtPlayerComReconexao()
+}
+
+async function recarregarSrtPlayerManual() {
+  if (recarregandoSrt.value) return
+
+  recarregandoSrt.value = true
+  erroOperacao.value = ''
+
+  try {
+    await pararSrtPlayer()
+    cancelarReconexaoSrtPlayer()
+    await aguardar(120)
+    formVmix.value = await obterConfiguracaoVmix()
+    await sincronizarPlaybackSrtPlayerComReconexao({ propagarErroFinal: true })
+  } catch (error) {
+    erroOperacao.value = (error as Error).message
+  } finally {
+    recarregandoSrt.value = false
+  }
 }
 
 async function sincronizarBoundsSrtPlayer() {
-  if (
-    !srtConfigurado.value ||
-    !srtPlayerHostRef.value ||
-    algumModalAberto.value
-  ) {
+  if (!srtConfigurado.value || !srtPlayerHostRef.value) {
     await definirVisibilidadeSrtPlayer(false)
     return
   }
@@ -444,8 +437,66 @@ function sincronizarBoundsSrtPlayerNoProximoFrame() {
   })
 }
 
+function aguardar(ms: number) {
+  return new Promise((resolve) => window.setTimeout(resolve, ms))
+}
+
+function cancelarReconexaoSrtPlayer() {
+  srtReconnectToken += 1
+  srtReconnectTentativa = 0
+  srtStatus.value = ''
+
+  if (srtReconnectTimer !== null) {
+    window.clearTimeout(srtReconnectTimer)
+    srtReconnectTimer = null
+  }
+}
+
+function getIntervaloReconexaoSrt() {
+  if (srtReconnectTentativa <= 1) return 1000
+  if (srtReconnectTentativa === 2) return 2000
+  if (srtReconnectTentativa === 3) return 3000
+  return 5000
+}
+
+function agendarReconexaoSrtPlayer() {
+  if (!srtConfigurado.value || srtReconnectTimer !== null) return
+
+  if (srtReconnectTentativa >= SRT_RECONNECT_MAX_TENTATIVAS) {
+    srtStatus.value = 'Sinal SRT indisponivel. Clique em Recarregar quando o sinal voltar.'
+    return
+  }
+
+  srtReconnectTentativa += 1
+  const token = srtReconnectToken
+  const intervaloMs = getIntervaloReconexaoSrt()
+  srtStatus.value = `Aguardando sinal SRT... tentativa ${srtReconnectTentativa}/${SRT_RECONNECT_MAX_TENTATIVAS} em ${Math.round(intervaloMs / 1000)}s`
+
+  srtReconnectTimer = window.setTimeout(() => {
+    srtReconnectTimer = null
+
+    if (token !== srtReconnectToken || !srtConfigurado.value) {
+      return
+    }
+
+    void sincronizarPlaybackSrtPlayerComReconexao()
+  }, intervaloMs)
+}
+
+function isErroSrtTransitorio(error: unknown) {
+  const message = error instanceof Error ? error.message : String(error ?? '')
+
+  return (
+    message.includes('Object has been destroyed') ||
+    message.includes('srt-player:setBounds') ||
+    message.includes('srt-player:start') ||
+    message.includes('srt-player:setVisible')
+  )
+}
+
 async function sincronizarPlaybackSrtPlayer() {
-  if (!srtConfigurado.value || algumModalAberto.value) {
+  if (!srtConfigurado.value) {
+    cancelarReconexaoSrtPlayer()
     await definirVisibilidadeSrtPlayer(false)
     await pararSrtPlayer()
     return
@@ -453,7 +504,7 @@ async function sincronizarPlaybackSrtPlayer() {
 
   await prepararSrtPlayer()
   await sincronizarBoundsSrtPlayer()
-  await new Promise((resolve) => window.setTimeout(resolve, 180))
+  await aguardar(180)
   await sincronizarBoundsSrtPlayer()
   await definirVisibilidadeSrtPlayer(true)
   await iniciarSrtPlayer({
@@ -463,101 +514,44 @@ async function sincronizarPlaybackSrtPlayer() {
   })
 }
 
-async function carregarInputsVmix() {
-  if (!formVmix.value.ativo) {
-    inputsVmix.value = []
-    erroInputsVmix.value = 'Ative o recurso do vMix para buscar os inputs.'
-    return
+async function sincronizarPlaybackSrtPlayerComRetry(
+  tentativasRestantes = 2,
+  intervaloMs = 250
+) {
+  try {
+    await sincronizarPlaybackSrtPlayer()
+  } catch (error) {
+    if (!isErroSrtTransitorio(error) || tentativasRestantes <= 0) {
+      throw error
+    }
+
+    await aguardar(intervaloMs)
+    await sincronizarPlaybackSrtPlayerComRetry(tentativasRestantes - 1, intervaloMs)
   }
+}
 
-  const ip = String(formVmix.value.ip ?? '').trim()
-  const porta = Number(formVmix.value.porta)
-
-  if (!ip) {
-    inputsVmix.value = []
-    erroInputsVmix.value = 'Informe o IP do vMix para buscar os inputs.'
-    return
-  }
-
-  if (!Number.isInteger(porta) || porta <= 0 || porta > 65535) {
-    inputsVmix.value = []
-    erroInputsVmix.value = 'Informe uma porta válida para buscar os inputs.'
-    return
-  }
-
-  carregandoInputsVmix.value = true
-  erroInputsVmix.value = ''
+async function sincronizarPlaybackSrtPlayerComReconexao(options?: {
+  propagarErroFinal?: boolean
+}) {
+  const propagarErroFinal = Boolean(options?.propagarErroFinal)
 
   try {
-    const lista = await listarInputsVmix({
-      ativo: Boolean(formVmix.value.ativo),
-      ip,
-      porta,
-      inputSelecionado: formVmix.value.inputSelecionado,
-      srt: formVmix.value.srt
-    })
-
-    inputsVmix.value = lista
-
-    if (!formVmix.value.inputSelecionado?.key) return
-
-    const selecionadoAtual = lista.find(
-      (input) => input.key === formVmix.value.inputSelecionado?.key
-    )
-
-    formVmix.value.inputSelecionado = selecionadoAtual ?? null
+    await sincronizarPlaybackSrtPlayerComRetry()
+    erroOperacao.value = ''
+    cancelarReconexaoSrtPlayer()
   } catch (error) {
-    inputsVmix.value = []
-    erroInputsVmix.value = (error as Error).message
-  } finally {
-    carregandoInputsVmix.value = false
-  }
-}
-
-function selecionarInputVmix(event: Event) {
-  const key = (event.target as HTMLSelectElement).value
-  formVmix.value.inputSelecionado = inputsVmix.value.find((input) => input.key === key) ?? null
-}
-
-async function salvarConfiguracaoModal() {
-  const ip = String(formVmix.value.ip ?? '').trim()
-  const porta = Number(formVmix.value.porta)
-  const srtPorta = Number(formVmix.value.srt.porta)
-
-  if ((formVmix.value.ativo || formVmix.value.srt.ativo) && !ip) {
-    erroConfiguracaoModal.value = 'Informe o IP do vMix.'
-    return
-  }
-
-  if (formVmix.value.ativo && (!Number.isInteger(porta) || porta <= 0 || porta > 65535)) {
-    erroConfiguracaoModal.value = 'Informe uma porta válida entre 1 e 65535.'
-    return
-  }
-
-  if (
-    formVmix.value.srt.ativo &&
-    (!Number.isInteger(srtPorta) || Number(srtPorta) <= 0 || Number(srtPorta) > 65535)
-  ) {
-    erroConfiguracaoModal.value = 'Informe uma porta SRT válida entre 1 e 65535.'
-    return
-  }
-
-  await salvarConfiguracaoVmix({
-    ativo: Boolean(formVmix.value.ativo),
-    ip,
-    porta,
-    inputSelecionado: formVmix.value.inputSelecionado,
-    srt: {
-      ativo: Boolean(formVmix.value.srt.ativo),
-      porta: Number.isInteger(srtPorta) && srtPorta > 0 ? srtPorta : SRT_DEFAULT_PORT
+    if (!srtConfigurado.value) {
+      cancelarReconexaoSrtPlayer()
+      if (propagarErroFinal) throw error
+      return
     }
-  })
 
-  arquivoInfo.value = await obterArquivoOperacao(leilaoId)
-  modalConfiguracaoAberto.value = false
-  erroConfiguracaoModal.value = ''
-  await sincronizarPlaybackSrtPlayer()
-  focarCampoLance()
+    agendarReconexaoSrtPlayer()
+
+    if (propagarErroFinal) {
+      throw error
+    }
+  }
 }
 
 async function enviarOverlayGc() {
@@ -601,6 +595,10 @@ function getCondicoesEspecificas() {
 
 function getInformacoesAnimal() {
   return formatarInformacoesParaExibicao(animalSelecionado.value?.informacoes ?? '')
+}
+
+function getGenealogiaAnimal() {
+  return formatarGenealogiaParaExibicao(animalSelecionado.value?.genealogia ?? '')
 }
 
 function formatarMoeda(valor: number) {
@@ -722,7 +720,7 @@ function ajustarLanceRapido(delta: number) {
 
 function editarAnimalSelecionado() {
   if (!animalSelecionado.value) return
-  abrirEditar(animalSelecionado.value)
+  void window.janela.abrirEditorAnimalOperacao(leilaoId, animalSelecionado.value.id)
 }
 
 async function abrirModoConferencia() {
@@ -839,61 +837,7 @@ function confirmarAnimalDestacado() {
 
 function abrirEdicaoLeilao() {
   if (!leilao.value) return
-
-  erroLeilaoModal.value = ''
-  formLeilao.value = {
-    titulo_evento: leilao.value.titulo_evento,
-    data: leilao.value.data,
-    condicoes_de_pagamento: leilao.value.condicoes_de_pagamento,
-    usa_dolar: leilao.value.usa_dolar,
-    cotacao: leilao.value.cotacao,
-    multiplicador: leilao.value.multiplicador
-  }
-  modalLeilaoAberto.value = true
-}
-
-function fecharModalLeilao() {
-  modalLeilaoAberto.value = false
-  focarCampoLance()
-}
-
-async function salvarLeilaoOperacao(payload: LeilaoCriarPayload) {
-  erroLeilaoModal.value = ''
-
-  if (!leilao.value) return
-  if (!Number.isInteger(payload.multiplicador) || payload.multiplicador <= 0) {
-    erroLeilaoModal.value = 'Multiplicador deve ser um número inteiro maior que 0'
-    return
-  }
-  if (payload.usa_dolar) {
-    if (!payload.cotacao || payload.cotacao <= 0) {
-      erroLeilaoModal.value = 'Cotação é obrigatória quando usa dólar'
-      return
-    }
-  } else {
-    payload.cotacao = null
-  }
-
-  leilao.value = await atualizarLeilao(leilao.value.id, {
-    condicoes_de_pagamento: payload.condicoes_de_pagamento,
-    usa_dolar: payload.usa_dolar,
-    cotacao: payload.cotacao,
-    multiplicador: payload.multiplicador
-  })
-  modalLeilaoAberto.value = false
-  focarCampoLance()
-  await sincronizarArquivo()
-}
-
-function fecharModalOperacao() {
-  fecharModal()
-  focarCampoLance()
-}
-
-async function salvarEdicaoAnimal(payload: typeof form.value) {
-  await salvarModal(payload)
-  focarCampoLance()
-  await sincronizarArquivo()
+  void window.janela.abrirEditorLeilaoOperacao(leilao.value.id)
 }
 
 async function copiarTexto(texto: string, alvo: 'caminho') {
@@ -1058,10 +1002,6 @@ watch(layoutInformacoesModo, () => {
   void sincronizarArquivo()
 })
 
-watch(algumModalAberto, () => {
-  void sincronizarPlaybackSrtPlayer()
-})
-
 onMounted(async () => {
   await window.janela.definirPreset('OPERACAO')
   try {
@@ -1072,6 +1012,7 @@ onMounted(async () => {
       await aplicarEstadoOperacaoExterno(estado)
     }
     await iniciarRealtimeOperacao()
+    await iniciarRealtimeConfigVmix()
   } catch (error) {
     erroOperacao.value = (error as Error).message
     const conexao = await obterConexaoOperacao()
@@ -1083,7 +1024,7 @@ onMounted(async () => {
       return
     }
   }
-  await sincronizarPlaybackSrtPlayer()
+  await sincronizarPlaybackSrtPlayerComReconexao()
   await sincronizarArquivo()
   focarCampoLance()
 })
@@ -1141,9 +1082,14 @@ onUnmounted(() => {
     window.cancelAnimationFrame(srtBoundsSyncFrame)
     srtBoundsSyncFrame = null
   }
+  cancelarReconexaoSrtPlayer()
   if (operacaoEventSource) {
     operacaoEventSource.close()
     operacaoEventSource = null
+  }
+  if (configVmixEventSource) {
+    configVmixEventSource.close()
+    configVmixEventSource = null
   }
   void desligarSrtPlayer()
 })
@@ -1210,20 +1156,39 @@ onUnmounted(() => {
               <div class="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
                 SRT
               </div>
-              <button
-                type="button"
-                class="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-300 bg-white text-sm text-slate-700 transition hover:border-slate-400 hover:bg-slate-100"
-                :title="srtPlayerMutado ? 'Ativar som' : 'Mutar som'"
-                @click="toggleMuteSrtPlayer"
-              >
-                <i :class="['fas', srtPlayerMutado ? 'fa-volume-xmark' : 'fa-volume-high']" />
-              </button>
+              <div class="flex items-center gap-2">
+                <button
+                  type="button"
+                  class="inline-flex h-8 items-center justify-center rounded-md border border-slate-300 bg-white px-2.5 text-xs font-medium text-slate-700 transition hover:border-slate-400 hover:bg-slate-100 disabled:cursor-wait disabled:opacity-70"
+                  :disabled="recarregandoSrt"
+                  title="Recarregar SRT"
+                  @click="recarregarSrtPlayerManual"
+                >
+                  <i :class="['fas', recarregandoSrt ? 'fa-spinner fa-spin' : 'fa-rotate-right']" />
+                  <span class="ml-1">{{ recarregandoSrt ? 'Recarregando' : 'Recarregar' }}</span>
+                </button>
+                <button
+                  type="button"
+                  class="inline-flex h-8 w-8 items-center justify-center rounded-md border border-slate-300 bg-white text-sm text-slate-700 transition hover:border-slate-400 hover:bg-slate-100"
+                  :title="srtPlayerMutado ? 'Ativar som' : 'Mutar som'"
+                  @click="toggleMuteSrtPlayer"
+                >
+                  <i :class="['fas', srtPlayerMutado ? 'fa-volume-xmark' : 'fa-volume-high']" />
+                </button>
+              </div>
             </div>
 
             <div
               ref="srtPlayerHostRef"
               class="aspect-video overflow-hidden bg-black"
             ></div>
+
+            <div
+              v-if="srtStatus"
+              class="border-t border-amber-200 bg-amber-50 px-3 py-2 text-xs font-medium text-amber-800"
+            >
+              {{ srtStatus }}
+            </div>
           </div>
 
           <div class="hidden rounded-3xl border border-slate-200 bg-white p-4 shadow-sm md:block">
@@ -1612,7 +1577,7 @@ onUnmounted(() => {
                   Genealogia
                 </div>
                 <div class="mt-1 break-words">
-                  {{ animalSelecionado.genealogia || 'Sem genealogia' }}
+                  {{ getGenealogiaAnimal() || 'Sem genealogia' }}
                 </div>
               </div>
 
@@ -1757,237 +1722,5 @@ onUnmounted(() => {
 
       </div>
     </div>
-
-    <AnimalModal
-      :aberto="modalAberto"
-      :modo="modalModo"
-      :layout-modo="layoutInformacoesModo"
-      :form="form"
-      :erro="erroModal"
-      @fechar="fecharModalOperacao"
-      @salvar="salvarEdicaoAnimal"
-    />
-
-    <BaseModal :aberto="modalLeilaoAberto" titulo="Editar Operação" @fechar="fecharModalLeilao">
-      <div
-        v-if="erroLeilaoModal"
-        class="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700"
-      >
-        {{ erroLeilaoModal }}
-      </div>
-
-      <div class="grid grid-cols-12 gap-5">
-        <div class="col-span-12 md:col-span-4">
-          <label class="mb-2 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
-            Multiplicador
-          </label>
-          <input
-            v-model.number="formLeilao.multiplicador"
-            class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800 shadow-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100"
-            type="number"
-            min="1"
-            step="1"
-          />
-        </div>
-
-        <div class="col-span-12 md:col-span-8">
-          <label class="mb-2 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
-            Condições Pagto.
-          </label>
-          <input
-            v-model="formLeilao.condicoes_de_pagamento"
-            class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800 shadow-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100"
-            type="text"
-          />
-        </div>
-
-        <div class="col-span-12 md:col-span-6">
-          <div
-            class="flex h-full items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 shadow-sm"
-          >
-            <div>
-              <div class="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
-                Moeda
-              </div>
-              <label class="mt-1 block text-sm font-medium text-slate-800">Usar dólar?</label>
-            </div>
-            <BaseSwitch v-model="formLeilao.usa_dolar" />
-          </div>
-        </div>
-
-        <div class="col-span-12 md:col-span-6">
-          <label class="mb-2 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
-            Cotação do Dólar
-          </label>
-          <input
-            v-model.number="formLeilao.cotacao"
-            :disabled="!formLeilao.usa_dolar"
-            class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800 shadow-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
-            type="number"
-            min="0"
-            step="0.01"
-          />
-        </div>
-      </div>
-
-      <template #footer>
-        <BaseButton @click="fecharModalLeilao">Cancelar</BaseButton>
-        <BaseButton variante="primario" @click="salvarLeilaoOperacao(formLeilao)">
-          Salvar
-        </BaseButton>
-      </template>
-    </BaseModal>
-
-    <BaseModal
-      :aberto="modalConfiguracaoAberto"
-      titulo="Configuração do vMix"
-      @fechar="fecharModalConfiguracao"
-    >
-      <div
-        v-if="erroConfiguracaoModal"
-        class="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700"
-      >
-        {{ erroConfiguracaoModal }}
-      </div>
-
-      <div class="grid grid-cols-12 gap-5">
-        <div class="col-span-12">
-          <div
-            class="flex h-full items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 shadow-sm"
-          >
-            <div>
-              <div class="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
-                Integração
-              </div>
-              <label class="mt-1 block text-sm font-medium text-slate-800">Ativar vMix?</label>
-            </div>
-            <BaseSwitch v-model="formVmix.ativo" />
-          </div>
-        </div>
-
-        <div class="col-span-12">
-          <div
-            class="flex h-full items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 shadow-sm"
-          >
-            <div>
-              <div class="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
-                Tela SRT
-              </div>
-              <label class="mt-1 block text-sm font-medium text-slate-800">Ativar SRT?</label>
-            </div>
-            <BaseSwitch v-model="formVmix.srt.ativo" />
-          </div>
-        </div>
-
-        <div class="col-span-12 md:col-span-7">
-          <label class="mb-2 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
-            IP do vMix
-          </label>
-          <input
-            v-model="formVmix.ip"
-            class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800 shadow-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
-            type="text"
-            placeholder="Ex.: 192.168.0.50"
-          />
-        </div>
-
-        <div class="col-span-12 md:col-span-5">
-          <label class="mb-2 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
-            Porta
-          </label>
-          <input
-            v-model.number="formVmix.porta"
-            class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800 shadow-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
-            type="number"
-            min="1"
-            max="65535"
-            step="1"
-            placeholder="8088"
-          />
-        </div>
-
-        <div class="col-span-12 md:col-span-5">
-          <label class="mb-2 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
-            Porta SRT
-          </label>
-          <input
-            v-model.number="formVmix.srt.porta"
-            class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800 shadow-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
-            type="number"
-            min="1"
-            max="65535"
-            step="1"
-            placeholder="9001"
-          />
-        </div>
-
-        <div class="col-span-12">
-          <div class="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
-            <div class="text-sm text-slate-600">
-              Buscar inputs disponíveis no vMix configurado.
-            </div>
-            <BaseButton :disabled="carregandoInputsVmix || !formVmix.ativo" @click="carregarInputsVmix">
-              {{ carregandoInputsVmix ? 'Buscando...' : 'Atualizar' }}
-            </BaseButton>
-          </div>
-        </div>
-
-        <div
-          v-if="erroInputsVmix"
-          class="col-span-12 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700"
-        >
-          {{ erroInputsVmix }}
-        </div>
-
-        <div class="col-span-12">
-          <label class="mb-2 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
-            Input do vMix
-          </label>
-          <div class="relative">
-            <select
-              :value="formVmix.inputSelecionado?.key ?? ''"
-              class="w-full appearance-none rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 pr-10 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
-              :disabled="!formVmix.ativo || carregandoInputsVmix || inputsVmix.length === 0"
-              @change="selecionarInputVmix"
-            >
-              <option value="">Selecione um input</option>
-              <option v-for="input in inputsVmix" :key="input.key" :value="input.key">
-                {{ input.title || `Input ${input.number}` }} | #{{ input.number }} | {{ input.type }}
-              </option>
-            </select>
-            <i
-              class="fas fa-chevron-down pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-xs text-slate-400"
-            />
-          </div>
-        </div>
-
-        <div
-          v-if="formVmix.inputSelecionado"
-          class="col-span-12 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800"
-        >
-          Input salvo: {{ formVmix.inputSelecionado.title || `Input ${formVmix.inputSelecionado.number}` }}
-          (#{{ formVmix.inputSelecionado.number }}) - {{ formVmix.inputSelecionado.type }}
-        </div>
-
-        <div class="col-span-12">
-          <div class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-            Padrões do host: IP <strong>127.0.0.1</strong>, vMix <strong>8088</strong> e SRT
-            <strong>9001</strong>
-          </div>
-        </div>
-      </div>
-
-      <template #footer>
-        <BaseButton
-          v-if="conexaoOperacao?.modo === 'HOST'"
-          variante="secundario"
-          @click="restaurarPadroesHostVmix"
-        >
-          Restaurar padrões
-        </BaseButton>
-        <BaseButton @click="fecharModalConfiguracao">Cancelar</BaseButton>
-        <BaseButton variante="primario" @click="salvarConfiguracaoModal">Salvar</BaseButton>
-      </template>
-    </BaseModal>
   </div>
 </template>

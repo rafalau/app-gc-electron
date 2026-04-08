@@ -656,6 +656,7 @@ export function registrarIpcConfig() {
       normalizarConfigVmix(vmix)
     )
     store.set('vmix', aplicado.vmix)
+    publicarSyncEvento('config:vmix')
   })
 
   ipcMain.handle('config:listarInputsVmix', async (_evt, vmix: Partial<VmixConfigIpc>) => {

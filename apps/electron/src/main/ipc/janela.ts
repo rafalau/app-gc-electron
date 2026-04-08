@@ -5,6 +5,7 @@ import { getModoConexaoOperacao } from './operacao'
 
 type JanelaPreset = 'DESKTOP' | 'OPERACAO'
 const janelasConferencia = new Map<string, BrowserWindow>()
+const janelasOperacao = new Map<string, BrowserWindow>()
 
 function centralizarNaTela(win: BrowserWindow, parent?: BrowserWindow | null) {
   const bounds = win.getBounds()
@@ -43,6 +44,28 @@ async function carregarJanelaConferencia(win: BrowserWindow, leilaoId: string, a
   })
 }
 
+async function carregarJanelaOperacao(
+  win: BrowserWindow,
+  windowMode: 'operation-auction-editor' | 'operation-animal-editor' | 'operation-vmix-editor',
+  queryParams: Record<string, string>
+) {
+  const conexao = await getModoConexaoOperacao()
+  const query = new URLSearchParams({
+    window: windowMode,
+    baseUrl: conexao.baseUrl,
+    ...queryParams
+  })
+
+  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+    await win.loadURL(`${process.env['ELECTRON_RENDERER_URL']}?${query.toString()}`)
+    return
+  }
+
+  await win.loadFile(join(__dirname, '../renderer/index.html'), {
+    query: Object.fromEntries(query.entries())
+  })
+}
+
 function aplicarPreset(win: BrowserWindow, preset: JanelaPreset) {
   if (preset === 'OPERACAO') {
     win.setMinimumSize(380, 720)
@@ -65,7 +88,7 @@ export function registrarIpcJanela() {
 
   ipcMain.handle('janela:abrirEdicaoRapida', async (event, leilaoId: string, animalId?: string) => {
     const parent = BrowserWindow.fromWebContents(event.sender)
-  const chave = leilaoId
+    const chave = leilaoId
 
     const existente = janelasConferencia.get(chave)
     if (existente && !existente.isDestroyed()) {
@@ -99,5 +122,119 @@ export function registrarIpcJanela() {
 
     janelasConferencia.set(chave, win)
     await carregarJanelaConferencia(win, leilaoId, animalId)
+  })
+
+  ipcMain.handle('janela:abrirEditorLeilaoOperacao', async (event, leilaoId: string) => {
+    const parent = BrowserWindow.fromWebContents(event.sender)
+    const chave = `leilao:${leilaoId}`
+    const existente = janelasOperacao.get(chave)
+
+    if (existente && !existente.isDestroyed()) {
+      await carregarJanelaOperacao(existente, 'operation-auction-editor', { leilaoId })
+      existente.show()
+      existente.focus()
+      return
+    }
+
+    const win = new BrowserWindow({
+      width: 800,
+      height: 620,
+      minWidth: 640,
+      minHeight: 480,
+      show: false,
+      autoHideMenuBar: false,
+      webPreferences: {
+        preload: join(__dirname, '../../preload/index.js'),
+        sandbox: false
+      }
+    })
+
+    win.on('ready-to-show', () => {
+      centralizarNaTela(win, parent)
+      win.show()
+    })
+
+    win.on('closed', () => {
+      janelasOperacao.delete(chave)
+    })
+
+    janelasOperacao.set(chave, win)
+    await carregarJanelaOperacao(win, 'operation-auction-editor', { leilaoId })
+  })
+
+  ipcMain.handle('janela:abrirEditorAnimalOperacao', async (event, leilaoId: string, animalId: string) => {
+    const parent = BrowserWindow.fromWebContents(event.sender)
+    const chave = `animal:${leilaoId}`
+    const existente = janelasOperacao.get(chave)
+
+    if (existente && !existente.isDestroyed()) {
+      await carregarJanelaOperacao(existente, 'operation-animal-editor', { leilaoId, animalId })
+      existente.show()
+      existente.focus()
+      return
+    }
+
+    const win = new BrowserWindow({
+      width: 800,
+      height: 620,
+      minWidth: 640,
+      minHeight: 480,
+      show: false,
+      autoHideMenuBar: false,
+      webPreferences: {
+        preload: join(__dirname, '../../preload/index.js'),
+        sandbox: false
+      }
+    })
+
+    win.on('ready-to-show', () => {
+      centralizarNaTela(win, parent)
+      win.show()
+    })
+
+    win.on('closed', () => {
+      janelasOperacao.delete(chave)
+    })
+
+    janelasOperacao.set(chave, win)
+    await carregarJanelaOperacao(win, 'operation-animal-editor', { leilaoId, animalId })
+  })
+
+  ipcMain.handle('janela:abrirConfiguracaoVmixOperacao', async (event, leilaoId: string) => {
+    const parent = BrowserWindow.fromWebContents(event.sender)
+    const chave = `vmix:${leilaoId}`
+    const existente = janelasOperacao.get(chave)
+
+    if (existente && !existente.isDestroyed()) {
+      await carregarJanelaOperacao(existente, 'operation-vmix-editor', { leilaoId })
+      existente.show()
+      existente.focus()
+      return
+    }
+
+    const win = new BrowserWindow({
+      width: 500,
+      height: 620,
+      minWidth: 420,
+      minHeight: 480,
+      show: false,
+      autoHideMenuBar: false,
+      webPreferences: {
+        preload: join(__dirname, '../../preload/index.js'),
+        sandbox: false
+      }
+    })
+
+    win.on('ready-to-show', () => {
+      centralizarNaTela(win, parent)
+      win.show()
+    })
+
+    win.on('closed', () => {
+      janelasOperacao.delete(chave)
+    })
+
+    janelasOperacao.set(chave, win)
+    await carregarJanelaOperacao(win, 'operation-vmix-editor', { leilaoId })
   })
 }

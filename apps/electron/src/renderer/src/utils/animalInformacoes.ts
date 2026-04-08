@@ -72,8 +72,10 @@ export function buildInformacoesAgregadas({
     pelagem,
     nascimento,
     altura ? `ALTURA: ${altura}` : ''
-  ].map((parte) => String(parte ?? '').trim())
-  return partes.some(Boolean) ? partes.join('   |   ') : ''
+  ]
+    .map((parte) => String(parte ?? '').trim())
+    .filter(Boolean)
+  return partes.length > 0 ? partes.join('   |   ') : ''
 }
 
 export function formatarInformacoesParaExibicao(informacoes: string) {
@@ -81,5 +83,11 @@ export function formatarInformacoesParaExibicao(informacoes: string) {
     .split('|')
     .map((parte) => parte.trim())
     .filter(Boolean)
-    .join(' | ')
+    .join('   |   ')
+}
+
+export function formatarGenealogiaParaExibicao(genealogia: string) {
+  return String(genealogia ?? '')
+    .replace(/\s+X\s+/g, '   X   ')
+    .trim()
 }

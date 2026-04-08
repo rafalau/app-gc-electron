@@ -97,11 +97,30 @@ type OperacaoConexaoInfo = {
   ipsDisponiveis: string[]
 }
 
+type VmixConfigPayload = {
+  ativo: boolean
+  ip: string
+  porta: number
+  inputSelecionado: {
+    key: string
+    number: string
+    title: string
+    type: string
+  } | null
+  srt: {
+    ativo: boolean
+    porta: number | null
+  }
+}
+
 let operacaoServer: Server | null = null
 let operacaoServerPort = 18452
 const OPERACAO_JSON_PATH = '/operacao.json'
 const operacaoSseClientes = new Map<string, Set<import('http').ServerResponse>>()
 const syncSseClientes = new Map<string, Set<import('http').ServerResponse>>()
+const HOST_DEFAULT_IP = '127.0.0.1'
+const VMIX_DEFAULT_PORT = 8088
+const SRT_DEFAULT_PORT = 9001
 
 function getAppModeOverride(): ModoOperacao {
   if (__APP_MODE__ === 'HOST' || __APP_MODE__ === 'REMOTO') {
@@ -109,6 +128,119 @@ function getAppModeOverride(): ModoOperacao {
   }
 
   return null
+}
+
+function normalizarConfigVmix(vmix?: Partial<VmixConfigPayload> | null): VmixConfigPayload {
+  const porta = Number(vmix?.porta)
+  const portaSrt = Number(vmix?.srt?.porta)
+
+  return {
+    ativo: Boolean(vmix?.ativo),
+    ip: String(vmix?.ip ?? '').trim(),
+    porta: Number.isInteger(porta) && porta > 0 ? porta : VMIX_DEFAULT_PORT,
+    inputSelecionado: vmix?.inputSelecionado
+      ? {
+          key: String(vmix.inputSelecionado.key ?? '').trim(),
+          number: String(vmix.inputSelecionado.number ?? '').trim(),
+          title: String(vmix.inputSelecionado.title ?? '').trim(),
+          type: String(vmix.inputSelecionado.type ?? '').trim()
+        }
+      : null,
+    srt: {
+      ativo: Boolean(vmix?.srt?.ativo),
+      porta: Number.isInteger(portaSrt) && portaSrt > 0 ? portaSrt : SRT_DEFAULT_PORT
+    }
+  }
+}
+
+function aplicarDefaultsVmix(
+  modo: ModoOperacao,
+  hostIp: string,
+  vmix: VmixConfigPayload
+): VmixConfigPayload {
+  if (modo === 'HOST') {
+    return {
+      ...vmix,
+      ip: vmix.ip || hostIp || HOST_DEFAULT_IP
+    }
+  }
+
+  if (modo === 'REMOTO') {
+    return {
+      ...vmix,
+      ip: vmix.ip || hostIp
+    }
+  }
+
+  return vmix
+}
+
+function extrairAtributosXml(bloco: string) {
+  const atributos: Record<string, string> = {}
+
+  for (const match of bloco.matchAll(/(\w+)="([^"]*)"/g)) {
+    atributos[match[1]] = match[2]
+  }
+
+  return atributos
+}
+
+async function listarInputsVmix(config: Partial<VmixConfigPayload>) {
+  const vmix = normalizarConfigVmix(config)
+
+  if (!vmix.ativo) {
+    throw new Error('Ative o recurso do vMix para buscar os inputs.')
+  }
+
+  if (!vmix.ip) {
+    throw new Error('Informe o IP do vMix para buscar os inputs.')
+  }
+
+  const response = await fetch(`http://${vmix.ip}:${vmix.porta}/api`)
+
+  if (!response.ok) {
+    throw new Error(`Falha ao consultar vMix API (${response.status}).`)
+  }
+
+  const xml = await response.text()
+  const inputsMatch = xml.match(/<inputs[^>]*>([\s\S]*?)<\/inputs>/i)
+
+  if (!inputsMatch) return []
+
+  const inputs: Array<{ number: string; title: string; type: string; key: string }> = []
+
+  for (const match of inputsMatch[1].matchAll(/<input\b([^>]*)\/?>/gi)) {
+    const attrs = extrairAtributosXml(match[1])
+    inputs.push({
+      number: String(attrs.number ?? ''),
+      title: String(attrs.title ?? ''),
+      type: String(attrs.type ?? ''),
+      key: String(attrs.key ?? '')
+    })
+  }
+
+  return inputs
+}
+
+async function obterConfigVmixOperacao() {
+  const store = await getStore()
+  const modo = getAppModeOverride() ?? store.get('modo')
+  const conexao = store.get('conexaoApp')
+  const vmix = normalizarConfigVmix(store.get('vmix'))
+  return aplicarDefaultsVmix(modo, String(conexao?.hostIp ?? '').trim(), vmix)
+}
+
+async function salvarConfigVmixOperacao(vmix: Partial<VmixConfigPayload>) {
+  const store = await getStore()
+  const modo = getAppModeOverride() ?? store.get('modo')
+  const conexao = store.get('conexaoApp')
+  const aplicado = aplicarDefaultsVmix(
+    modo,
+    String(conexao?.hostIp ?? '').trim(),
+    normalizarConfigVmix(vmix)
+  )
+  store.set('vmix', aplicado)
+  return aplicado
 }
 
 function isPrivateIpv4(address: string) {
@@ -435,7 +567,13 @@ function formatarInformacoesParaExibicao(informacoes: string) {
     .split('|')
     .map((parte) => parte.trim())
     .filter(Boolean)
-    .join(' | ')
+    .join('   |   ')
+}
+
+function formatarGenealogiaParaExibicao(genealogia: string) {
+  return String(genealogia ?? '')
+    .replace(/\s+X\s+/g, '   X   ')
+    .trim()
 }
 
 function serializarAnimal(animal: any): AnimalPayload | null {
@@ -539,7 +677,7 @@ async function montarJsonOperacao(leilaoId: string) {
       PELAGEM: animal?.pelagem || parsed.pelagem || '',
       NASCIMENTO: animal?.nascimento || parsed.nascimento || '',
       ALTURA: animal?.altura || parsed.altura || '',
-      GENEALOGIA: animal?.genealogia ?? '',
+      GENEALOGIA: formatarGenealogiaParaExibicao(animal?.genealogia ?? ''),
       VENDEDOR: animal?.vendedor ?? '',
       PACOTES_COBERTURAS:
         animal?.categoria === 'COBERTURAS' ? animal.condicoes_cobertura.join('\n') : '',
@@ -574,6 +712,7 @@ export async function ensureOperacaoServer() {
     const matchSync = url.match(/^\/operacao\/sync\/([^/]+)$/)
     const matchEvents = url.match(/^\/operacao\/events\/([^/]+)$/)
     const matchSyncEvents = url.match(/^\/sync\/events\/(.+)$/)
+    const matchConexao = url.match(/^\/sync\/conexao$/)
     const matchLeiloes = url.match(/^\/sync\/leiloes$/)
     const matchLeilao = url.match(/^\/sync\/leiloes\/([^/]+)$/)
     const matchAnimais = url.match(/^\/sync\/animais\/([^/]+)$/)
@@ -581,6 +720,8 @@ export async function ensureOperacaoServer() {
     const matchAnimal = url.match(/^\/sync\/animal\/([^/]+)$/)
     const matchAnimaisLimpar = url.match(/^\/sync\/animais-leilao\/([^/]+)$/)
     const matchLayout = url.match(/^\/sync\/layout\/([^/]+)$/)
+    const matchConfigVmix = url.match(/^\/sync\/config\/vmix$/)
+    const matchConfigVmixInputs = url.match(/^\/sync\/config\/vmix\/inputs$/)
     const matchConfigApiProviders = url.match(/^\/sync\/config\/api-providers$/)
     const matchTbsLeiloes = url.match(/^\/sync\/tbs\/leiloes$/)
     const matchTbsImportar = url.match(/^\/sync\/tbs\/importar$/)
@@ -706,6 +847,11 @@ export async function ensureOperacaoServer() {
         return
       }
 
+      if (matchConexao && req.method === 'GET') {
+        responderJson(res, 200, await getModoConexaoOperacao())
+        return
+      }
+
       if (matchLeiloes && req.method === 'GET') {
         responderJson(res, 200, await listarLeiloesLocal())
         return
@@ -818,6 +964,25 @@ export async function ensureOperacaoServer() {
         const layout = await salvarLayoutAnimaisLocal(leilaoId, payload)
         publicarSyncEvento(`animais:${leilaoId}`)
         responderJson(res, 200, layout)
+        return
+      }
+
+      if (matchConfigVmix && req.method === 'GET') {
+        responderJson(res, 200, await obterConfigVmixOperacao())
+        return
+      }
+
+      if (matchConfigVmix && req.method === 'PUT') {
+        const payload = await lerCorpoJson(req)
+        const config = await salvarConfigVmixOperacao(payload)
+        publicarSyncEvento('config:vmix')
+        responderJson(res, 200, config)
+        return
+      }
+
+      if (matchConfigVmixInputs && req.method === 'POST') {
+        const payload = await lerCorpoJson(req)
+        responderJson(res, 200, await listarInputsVmix(payload))
         return
       }
 

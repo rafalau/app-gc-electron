@@ -26,9 +26,15 @@ async function bootstrap() {
     const app =
       windowMode === 'quick-edit'
         ? createApp((await import('./views/TelaEdicaoRapidaAnimais.vue')).default)
-        : createApp((await import('./App.vue')).default)
+        : windowMode === 'operation-auction-editor'
+          ? createApp((await import('./views/TelaOperacaoEditarLeilaoJanela.vue')).default)
+          : windowMode === 'operation-animal-editor'
+            ? createApp((await import('./views/TelaOperacaoEditarAnimalJanela.vue')).default)
+            : windowMode === 'operation-vmix-editor'
+              ? createApp((await import('./views/TelaOperacaoConfigurarVmixJanela.vue')).default)
+              : createApp((await import('./App.vue')).default)
 
-    if (windowMode !== 'quick-edit') {
+    if (!windowMode) {
       const { router } = await import('./router')
       app.use(router)
     }
