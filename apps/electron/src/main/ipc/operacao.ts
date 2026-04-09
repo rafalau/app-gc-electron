@@ -600,11 +600,39 @@ function parseInformacoesAgregadas(informacoes: string) {
 }
 
 function formatarInformacoesParaExibicao(informacoes: string) {
-  return String(informacoes ?? '')
+  const partes = String(informacoes ?? '')
     .split('|')
     .map((parte) => parte.trim())
     .filter(Boolean)
-    .join('   |   ')
+
+  let alturaIncluida = false
+  let pesoIncluido = false
+
+  const normalizadas = partes.reduce<string[]>((acc, parte) => {
+    const matchInfo = parte.match(/^INFO\s*:\s*(.+)$/i)
+    const valor = matchInfo ? matchInfo[1].trim() : parte
+
+    if (!valor) return acc
+
+    if (/^ALTURA\s*:/i.test(valor)) {
+      if (alturaIncluida) return acc
+      alturaIncluida = true
+      acc.push(valor.replace(/^ALTURA\s*:/i, 'ALT.:'))
+      return acc
+    }
+
+    if (/^PESO\s*:/i.test(valor)) {
+      if (pesoIncluido) return acc
+      pesoIncluido = true
+      acc.push(valor)
+      return acc
+    }
+
+    acc.push(matchInfo ? `INFO: ${valor}` : valor)
+    return acc
+  }, [])
+
+  return normalizadas.join('   |   ')
 }
 
 function formatarInformacoesBasicasParaExibicao(informacoes: string) {
@@ -613,23 +641,22 @@ function formatarInformacoesBasicasParaExibicao(informacoes: string) {
     .map((parte) => parte.trim())
     .filter(Boolean)
 
-  const semRotulosAlturaPeso = partes.filter(
-    (parte) => !/^ALTURA\s*:/i.test(parte) && !/^PESO\s*:/i.test(parte)
-  )
+  const basicas = partes
+    .map((parte) => {
+      if (/^ALTURA\s*:/i.test(parte) || /^PESO\s*:/i.test(parte)) return ''
 
-  if (semRotulosAlturaPeso.length !== partes.length) {
-    return semRotulosAlturaPeso.join('   |   ')
-  }
+      const matchInfo = parte.match(/^INFO\s*:\s*(.+)$/i)
+      if (!matchInfo) return parte
 
-  if (partes.length >= 6) {
-    return [...partes.slice(0, 4), ...partes.slice(6)].join('   |   ')
-  }
+      const conteudo = matchInfo[1].trim()
+      if (!conteudo) return ''
+      if (/^(ALTURA|PESO)\s*:/i.test(conteudo)) return ''
 
-  if (partes.length >= 5) {
-    return [...partes.slice(0, 4), ...partes.slice(5)].join('   |   ')
-  }
+      return conteudo
+    })
+    .filter(Boolean)
 
-  return partes.join('   |   ')
+  return basicas.join('   |   ')
 }
 
 function formatarAlturaPesoParaExibicao(altura: string, peso: string) {
