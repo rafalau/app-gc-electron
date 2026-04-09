@@ -6,6 +6,8 @@ import { applyUppercaseInput } from '@renderer/utils/uppercaseInput'
 
 const props = defineProps<{
   leiloes: Leilao[]
+  mostrarSincronizacao?: boolean
+  podeSincronizar?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -13,6 +15,7 @@ const emit = defineEmits<{
   (e: 'excluir', leilao: Leilao): void
   (e: 'animais', leilao: Leilao): void
   (e: 'operacao', leilao: Leilao): void
+  (e: 'sincronizar', leilao: Leilao): void
 }>()
 
 const showConfirmDelete = ref<string | null>(null)
@@ -24,8 +27,66 @@ function formatarDataBR(iso: string) {
   return `${d}/${m}/${y}`
 }
 
+function formatarDataHoraBR(iso?: string | null) {
+  if (!iso) return ''
+
+  const data = new Date(iso)
+  if (Number.isNaN(data.getTime())) return iso
+
+  return new Intl.DateTimeFormat('pt-BR', {
+    dateStyle: 'short',
+    timeStyle: 'short'
+  }).format(data)
+}
+
+function textoStatusSync(leilao: Leilao) {
+  if (leilao.gc_sync_status === 'error') {
+    return 'Falha'
+  }
+
+  if (leilao.gc_sync_at) {
+    return formatarDataHoraBR(leilao.gc_sync_at)
+  }
+
+  return 'Pendente'
+}
+
+function partesStatusSync(leilao: Leilao) {
+  if (leilao.gc_sync_status === 'error' || !leilao.gc_sync_at) {
+    return {
+      linha1: textoStatusSync(leilao),
+      linha2: ''
+    }
+  }
+
+  const formatado = formatarDataHoraBR(leilao.gc_sync_at)
+  const [linha1 = formatado, linha2 = ''] = formatado.split(', ')
+
+  return { linha1, linha2 }
+}
+
+function classeStatusSync(leilao: Leilao) {
+  if (leilao.gc_sync_status === 'error') {
+    return 'text-rose-600'
+  }
+
+  if (leilao.gc_sync_at) {
+    return 'text-emerald-700'
+  }
+
+  return 'text-slate-400'
+}
+
 function getDropdownItems(leilao: Leilao) {
-  return [
+  const items = [
+    ...(props.mostrarSincronizacao
+      ? [{
+          label: 'Sinc. Servidor',
+          icon: 'fa-rotate-right',
+          disabled: !props.podeSincronizar,
+          action: () => emit('sincronizar', leilao)
+        }]
+      : []),
     {
       label: 'Gerenciar Animais',
       icon: 'fa-horse-head',
@@ -51,6 +112,8 @@ function getDropdownItems(leilao: Leilao) {
       }
     }
   ]
+
+  return items
 }
 
 function confirmarExclusao(leilao: Leilao) {
@@ -72,7 +135,8 @@ function cancelarExclusao() {
       class="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-4 py-2.5 grid grid-cols-12 text-xs md:text-sm font-semibold"
     >
       <div class="col-span-2 text-center">DATA</div>
-      <div class="col-span-6">NOME DO EVENTO</div>
+      <div class="col-span-4">NOME DO EVENTO</div>
+      <div class="col-span-2 text-center">SINC. SERVIDOR</div>
       <div class="col-span-2 text-center">ANIMAIS</div>
       <div class="col-span-2 text-center">AÇÕES</div>
     </div>
@@ -86,7 +150,7 @@ function cancelarExclusao() {
       <div
         v-for="l in props.leiloes"
         :key="l.id"
-        class="px-4 py-2.5 grid grid-cols-12 items-center border-t border-gray-100 hover:bg-blue-50 transition-colors relative"
+      class="px-4 py-2.5 grid grid-cols-12 items-center border-t border-gray-100 hover:bg-blue-50 transition-colors relative"
       >
         <!-- Data -->
         <div class="col-span-2 flex justify-center">
@@ -98,8 +162,23 @@ function cancelarExclusao() {
         </div>
 
         <!-- Nome do Evento -->
-        <div class="col-span-6">
+        <div class="col-span-4">
           <div class="font-semibold text-gray-900 text-sm">{{ l.titulo_evento }}</div>
+        </div>
+
+        <!-- Sync -->
+        <div class="col-span-2 flex justify-center">
+          <div
+            class="inline-flex min-w-[112px] max-w-full flex-col items-center rounded-2xl bg-slate-50 px-2.5 py-1.5 text-xs tracking-[0.02em]"
+            :class="classeStatusSync(l)"
+          >
+            <span class="max-w-full truncate text-center font-medium">
+              {{ partesStatusSync(l).linha1 }}
+            </span>
+            <span v-if="partesStatusSync(l).linha2" class="max-w-full truncate text-center opacity-80">
+              {{ partesStatusSync(l).linha2 }}
+            </span>
+          </div>
         </div>
 
         <!-- Animais -->
@@ -115,7 +194,7 @@ function cancelarExclusao() {
         </div>
 
         <!-- Ações -->
-        <div class="col-span-2 flex justify-center">
+        <div class="col-span-2 flex items-center justify-center gap-2">
           <BaseDropdown :items="getDropdownItems(l)" label="Ações" />
         </div>
       </div>

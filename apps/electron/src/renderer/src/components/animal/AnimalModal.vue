@@ -10,6 +10,7 @@ import type {
 import type { StudbookSearchResult } from '@renderer/types/importacao'
 import { buscarStudbook, importarAnimalStudbook } from '@renderer/services/importacao.service'
 import { applyUppercaseInput } from '@renderer/utils/uppercaseInput'
+import { getFriendlyErrorMessage } from '@renderer/utils/errorMessage'
 import {
   buildInformacoesAgregadas,
   parseInformacoesAgregadas
@@ -147,7 +148,7 @@ async function pesquisarStudbook() {
       studbookErro.value = 'A pesquisa não retornou resultados.'
     }
   } catch (error) {
-    studbookErro.value = (error as Error).message
+    studbookErro.value = getFriendlyErrorMessage(error)
   } finally {
     studbookLoading.value = false
   }
@@ -172,7 +173,7 @@ async function importarStudbook(registro: string) {
     }
     studbookAberto.value = false
   } catch (error) {
-    studbookErro.value = (error as Error).message
+    studbookErro.value = getFriendlyErrorMessage(error)
   } finally {
     studbookImportandoRegistro.value = ''
   }
@@ -481,7 +482,6 @@ async function importarStudbook(registro: string) {
   filter: blur(6px);
 }
 </style>
-
 
 
 

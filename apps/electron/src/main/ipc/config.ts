@@ -6,6 +6,7 @@ import {
 } from 'node:http'
 import { spawn, type ChildProcess } from 'node:child_process'
 import { existsSync } from 'node:fs'
+import { hostname } from 'node:os'
 import { join } from 'node:path'
 import { getStore } from '../store/store'
 import {
@@ -43,9 +44,17 @@ type ApiImportProviderConfigIpc = {
   url: string
 }
 
+type GcApiConfigIpc = {
+  baseUrl: string
+  accessToken: string
+  deviceName: string
+  lastPulledAt: string | null
+}
+
 const HOST_DEFAULT_IP = '127.0.0.1'
 const VMIX_DEFAULT_PORT = 8088
 const SRT_DEFAULT_PORT = 9001
+const GC_API_DEFAULT_DEVICE_NAME = hostname().trim() || 'gc-desktop'
 
 function getAppModeOverride(): 'HOST' | 'REMOTO' | null {
   if (__APP_MODE__ === 'HOST' || __APP_MODE__ === 'REMOTO') {
@@ -103,6 +112,57 @@ function normalizarApiImportProviderConfig(
       url: String(provider?.url ?? '').trim()
     }))
     .filter((provider) => provider.nome && provider.url)
+}
+
+function normalizarGcApiConfig(config?: Partial<GcApiConfigIpc> | null): GcApiConfigIpc {
+  const baseUrl = String(config?.baseUrl ?? '').trim().replace(/\/+$/, '')
+  const deviceName = String(config?.deviceName ?? '').trim()
+
+  return {
+    baseUrl,
+    accessToken: String(config?.accessToken ?? '').trim(),
+    deviceName:
+      !deviceName || deviceName === 'gc-desktop' ? GC_API_DEFAULT_DEVICE_NAME : deviceName,
+    lastPulledAt: config?.lastPulledAt ? String(config.lastPulledAt).trim() : null
+  }
+}
+
+async function testarConfiguracaoGcApi(config: Partial<GcApiConfigIpc> | null) {
+  const normalizado = normalizarGcApiConfig(config)
+
+  if (!normalizado.baseUrl) {
+    throw new Error('Informe a URL base da GC API.')
+  }
+
+  if (!normalizado.accessToken) {
+    throw new Error('Informe o token de acesso da GC API.')
+  }
+
+  const headers = {
+    Accept: 'application/json',
+    Authorization: `Bearer ${normalizado.accessToken}`
+  }
+
+  const healthResponse = await fetch(`${normalizado.baseUrl}/api/v1/health`, { headers })
+
+  if (!healthResponse.ok) {
+    throw new Error(`Falha ao consultar GC API (${healthResponse.status}).`)
+  }
+
+  const meResponse = await fetch(`${normalizado.baseUrl}/api/v1/me`, { headers })
+
+  if (!meResponse.ok) {
+    throw new Error('Token da GC API inválido ou expirado.')
+  }
+
+  const payload = (await meResponse.json()) as {
+    user?: { id: number | string; name: string; email: string }
+  }
+
+  return {
+    ok: true,
+    user: payload.user
+  }
 }
 
 function aplicarDefaultsDeModo(
@@ -719,6 +779,20 @@ export function registrarIpcConfig() {
       store.set('apiImportProviders', providersNormalizados)
     }
   )
+
+  ipcMain.handle('config:getGcApi', async () => {
+    const store = await getStore()
+    return normalizarGcApiConfig(store.get('gcApi'))
+  })
+
+  ipcMain.handle('config:setGcApi', async (_evt, config: Partial<GcApiConfigIpc> | null) => {
+    const store = await getStore()
+    store.set('gcApi', normalizarGcApiConfig(config))
+  })
+
+  ipcMain.handle('config:testGcApi', async (_evt, config: Partial<GcApiConfigIpc> | null) => {
+    return testarConfiguracaoGcApi(config)
+  })
 
   ipcMain.handle('config:getLayoutAnimais', async (_evt, leilaoId: string) => {
     const conexao = await getModoConexaoOperacao()

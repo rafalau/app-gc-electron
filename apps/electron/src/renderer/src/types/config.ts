@@ -30,3 +30,20 @@ export type ModoConfig = {
   hostIp: string
   portaApp: number
 }
+
+export type GcApiConfig = {
+  baseUrl: string
+  accessToken: string
+  deviceName: string
+  lastPulledAt: string | null
+}
+
+export type GcApiSyncSummary = {
+  pushed: number
+  pulled: number
+  created: number
+  updated: number
+  deleted: number
+  skipped: number
+  serverTime: string | null
+}

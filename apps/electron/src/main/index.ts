@@ -15,6 +15,7 @@ import { registrarIpcStudbook } from './ipc/studbook'
 import { registrarIpcOperacao } from './ipc/operacao'
 import { registrarIpcJanela } from './ipc/janela'
 import { registrarIpcSrtPlayer } from './ipc/srtPlayer'
+import { registrarIpcGcSync } from './ipc/gcSync'
 import { migrateDeploy } from './db/migrate'
 import { getStore } from './store/store'
 import { setSrtPlayerVisible } from './services/srtPlayer.service'
@@ -160,6 +161,7 @@ app
     registrarIpcOperacao()
     registrarIpcJanela()
     registrarIpcSrtPlayer()
+    registrarIpcGcSync()
 
     createWindow()
 

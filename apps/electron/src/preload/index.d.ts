@@ -9,6 +9,9 @@ export type Leilao = {
   cotacao: number | null
   multiplicador: number
   total_animais: number
+  gc_sync_status?: 'success' | 'error' | null
+  gc_sync_at?: string | null
+  gc_sync_error?: string | null
   criado_em: string
   atualizado_em: string
 }
@@ -169,6 +172,23 @@ export type ModoConfig = {
   portaApp: number
 }
 
+export type GcApiConfig = {
+  baseUrl: string
+  accessToken: string
+  deviceName: string
+  lastPulledAt: string | null
+}
+
+export type GcApiSyncSummary = {
+  pushed: number
+  pulled: number
+  created: number
+  updated: number
+  deleted: number
+  skipped: number
+  serverTime: string | null
+}
+
 export type OperacaoConexaoInfo = {
   modo: 'HOST' | 'REMOTO' | null
   hostIp: string
@@ -209,6 +229,11 @@ declare global {
       pararMonitorSrtExterno: () => Promise<{ ok: boolean }>
       getApiImportProviders: () => Promise<ApiImportProviderConfig[]>
       setApiImportProviders: (providers: ApiImportProviderConfig[]) => Promise<void>
+      getGcApi: () => Promise<GcApiConfig>
+      setGcApi: (config: GcApiConfig) => Promise<void>
+      testGcApi: (
+        config: GcApiConfig
+      ) => Promise<{ ok: boolean; user?: { id: number | string; name: string; email: string } }>
       getLayoutAnimais: (leilaoId: string) => Promise<LayoutAnimaisConfig>
       setLayoutAnimais: (leilaoId: string, layout: LayoutAnimaisConfig) => Promise<void>
     }
@@ -226,6 +251,10 @@ declare global {
       atualizarEmLote: (payloads: AnimalAtualizacaoEmLotePayload[]) => Promise<Animal[]>
       remover: (id: string) => Promise<boolean>
       removerPorLeilao: (leilaoId: string) => Promise<boolean>
+    }
+    gcSync: {
+      sincronizarTudo: () => Promise<GcApiSyncSummary>
+      sincronizarLeilao: (leilaoId: string) => Promise<GcApiSyncSummary>
     }
     importacao: {
       excel: (leilaoId: string, incluirRacaNasInformacoes?: boolean) => Promise<ImportSummary | null>

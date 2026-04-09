@@ -7,6 +7,9 @@ export type Leilao = {
   cotacao: number | null
   multiplicador: number
   total_animais: number
+  gc_sync_status?: 'success' | 'error' | null
+  gc_sync_at?: string | null
+  gc_sync_error?: string | null
   criado_em: string
   atualizado_em: string
 }

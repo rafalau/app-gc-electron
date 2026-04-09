@@ -20,6 +20,7 @@ import {
   importarLeilaoApi,
   listarLeiloesApi
 } from '../services/importacao.service'
+import { getFriendlyErrorMessage } from '../utils/errorMessage'
 import { obterLeilao } from '../services/leiloes.service'
 import { obterApiImportProviders } from '../services/config.service'
 import { obterConexaoOperacao } from '../services/operacao.service'
@@ -274,7 +275,7 @@ export function useAnimais(leilaoId: string) {
       apiImportLeiloes.value = await listarLeiloesApi(provider)
       apiImportSelectedAuctionId.value = apiImportLeiloes.value[0]?.id ?? null
     } catch (error) {
-      apiImportErro.value = (error as Error).message
+      apiImportErro.value = getFriendlyErrorMessage(error)
       apiImportLeiloes.value = []
       apiImportSelectedAuctionId.value = null
     } finally {
@@ -324,7 +325,7 @@ export function useAnimais(leilaoId: string) {
       apiImportAberto.value = false
       await carregar()
     } catch (error) {
-      apiImportErro.value = (error as Error).message
+      apiImportErro.value = getFriendlyErrorMessage(error)
     } finally {
       apiImportImportando.value = false
     }

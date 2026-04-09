@@ -5,12 +5,14 @@ interface DropdownItem {
   label: string
   icon?: string
   color?: 'default' | 'danger'
+  disabled?: boolean
   action: () => void
 }
 
 defineProps<{
   items: DropdownItem[]
   label?: string
+  variante?: 'primario' | 'secundario' | 'sucesso'
 }>()
 
 const isOpen = ref(false)
@@ -31,6 +33,7 @@ onUnmounted(() => {
 })
 
 function handleItemClick(item: DropdownItem) {
+  if (item.disabled) return
   item.action()
   isOpen.value = false
 }
@@ -44,7 +47,13 @@ function getColorClass(color?: 'default' | 'danger') {
   <div ref="dropdownRef" class="relative inline-block">
     <button
       type="button"
-      class="px-2.5 py-1.5 text-xs font-medium text-white bg-gray-600 border border-gray-700 rounded-lg hover:bg-gray-700 transition-colors flex items-center gap-1.5 whitespace-nowrap shadow-sm hover:shadow-md"
+      class="px-3 py-1.5 rounded-lg font-medium text-sm border transition-all duration-200 ease-out shadow-md hover:-translate-y-0.5 hover:shadow-lg active:translate-y-0 active:shadow-md flex items-center gap-1.5 whitespace-nowrap"
+      :class="{
+        'bg-blue-600 text-white border-blue-600 hover:bg-blue-700': variante === 'primario',
+        'bg-gray-600 text-white border-gray-700 hover:bg-gray-700':
+          !variante || variante === 'secundario',
+        'bg-green-600 text-white border-green-600 hover:bg-green-700': variante === 'sucesso'
+      }"
       @click="isOpen = !isOpen"
     >
       <i class="fas fa-cog text-xs" />
@@ -61,9 +70,11 @@ function getColorClass(color?: 'default' | 'danger') {
           v-for="(item, index) in items"
           :key="index"
           type="button"
+          :disabled="item.disabled"
           :class="[
             'w-full text-left px-4 py-2 text-sm font-medium transition-colors flex items-center gap-2',
             getColorClass(item.color),
+            item.disabled ? 'cursor-not-allowed opacity-50 hover:bg-white' : '',
             index < items.length - 1 ? 'border-b border-gray-100' : ''
           ]"
           @click="handleItemClick(item)"

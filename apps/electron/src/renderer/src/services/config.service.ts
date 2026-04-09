@@ -1,8 +1,24 @@
-import type { ModoConfig, SrtPreviewStatus, VmixConfig, VmixInput } from '../types/config'
+import type {
+  GcApiConfig,
+  ModoConfig,
+  SrtPreviewStatus,
+  VmixConfig,
+  VmixInput
+} from '../types/config'
 import type { ApiImportProviderConfig } from '../types/importacao'
+import { getFriendlyErrorMessage } from '../utils/errorMessage'
 
 const VMIX_DEFAULT_PORT = 8088
 const SRT_DEFAULT_PORT = 9001
+
+function normalizarGcApiConfig(config: GcApiConfig): GcApiConfig {
+  return {
+    baseUrl: String(config.baseUrl ?? '').trim(),
+    accessToken: String(config.accessToken ?? '').trim(),
+    deviceName: String(config.deviceName ?? 'gc-desktop').trim() || 'gc-desktop',
+    lastPulledAt: config.lastPulledAt ? String(config.lastPulledAt) : null
+  }
+}
 
 function normalizarInput(input: VmixInput | null): VmixInput | null {
   if (!input) return null
@@ -88,4 +104,27 @@ export async function salvarApiImportProviders(providers: ApiImportProviderConfi
       url: String(provider.url ?? '')
     }))
   )
+}
+
+export async function obterConfiguracaoGcApi(): Promise<GcApiConfig> {
+  return window.config.getGcApi()
+}
+
+export async function salvarConfiguracaoGcApi(config: GcApiConfig): Promise<void> {
+  try {
+    await window.config.setGcApi(normalizarGcApiConfig(config))
+  } catch (error) {
+    throw new Error(getFriendlyErrorMessage(error))
+  }
+}
+
+export async function testarConfiguracaoGcApi(config: GcApiConfig): Promise<{
+  ok: boolean
+  user?: { id: number | string; name: string; email: string }
+}> {
+  try {
+    return await window.config.testGcApi(normalizarGcApiConfig(config))
+  } catch (error) {
+    throw new Error(getFriendlyErrorMessage(error))
+  }
 }

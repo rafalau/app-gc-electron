@@ -1,5 +1,6 @@
 import { ipcMain } from 'electron'
 import { getPrisma } from '../db/prisma'
+import { getStore } from '../store/store'
 import {
   ensureOperacaoServer,
   fetchRemotoJson,
@@ -22,6 +23,13 @@ function upper(value?: string | null) {
   return String(value ?? '').trim().toUpperCase()
 }
 
+type GcApiLeilaoSyncState = {
+  status: 'success' | 'error'
+  lastSyncedAt: string | null
+  lastError: string | null
+  updatedAt: string
+}
+
 function normalizarPayloadCriar(payload: LeilaoCriarPayload): LeilaoCriarPayload {
   return {
     ...payload,
@@ -40,17 +48,26 @@ function normalizarPayloadAtualizar(payload: LeilaoAtualizarPayload): LeilaoAtua
   }
 }
 
-function serializar(leilao: any) {
+function serializar(leilao: any, gcSync?: GcApiLeilaoSyncState | null) {
   return {
     ...leilao,
     total_animais: leilao.total_animais ?? 0,
+    gc_sync_status: gcSync?.status ?? null,
+    gc_sync_at: gcSync?.lastSyncedAt ?? null,
+    gc_sync_error: gcSync?.lastError ?? null,
     criado_em: leilao.criado_em instanceof Date ? leilao.criado_em.toISOString() : leilao.criado_em,
     atualizado_em: leilao.atualizado_em instanceof Date ? leilao.atualizado_em.toISOString() : leilao.atualizado_em
   }
 }
 
+async function obterMapaGcApiLeiloesSync() {
+  const store = await getStore()
+  return store.get('gcApiLeiloesSync')
+}
+
 export async function listarLeiloesLocal() {
   const prisma = await getPrisma()
+  const gcSyncMap = await obterMapaGcApiLeiloesSync()
   const leiloes = await prisma.leilao.findMany({
     orderBy: [{ data: 'desc' }]
   })
@@ -67,12 +84,13 @@ export async function listarLeiloesLocal() {
     serializar({
       ...leilao,
       total_animais: contagensPorLeilao.get(leilao.id) ?? 0
-    })
+    }, gcSyncMap[leilao.id])
   )
 }
 
 export async function obterLeilaoLocal(id: string) {
   const prisma = await getPrisma()
+  const gcSyncMap = await obterMapaGcApiLeiloesSync()
   const leilao = await prisma.leilao.findUnique({
     where: { id }
   })
@@ -91,7 +109,7 @@ export async function obterLeilaoLocal(id: string) {
   return serializar({
     ...leilao,
     total_animais: Number(contagem[0]?.total ?? 0)
-  })
+  }, gcSyncMap[id])
 }
 
 export async function criarLeilaoLocal(payload: LeilaoCriarPayload) {

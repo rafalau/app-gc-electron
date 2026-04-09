@@ -1,7 +1,10 @@
 import Store from 'electron-store'
+import { hostname } from 'node:os'
 
 const VMIX_DEFAULT_PORT = 8088
 const SRT_DEFAULT_PORT = 9001
+const GC_API_DEFAULT_DEVICE_NAME = hostname().trim() || 'gc-desktop'
+const GC_API_DEFAULT_BASE_URL = 'https://api-app-gc.remate360.com.br'
 
 type StoreSchema = {
   modo: 'HOST' | 'REMOTO' | null
@@ -51,6 +54,21 @@ type StoreSchema = {
     nome: string
     url: string
   }>
+  gcApi: {
+    baseUrl: string
+    accessToken: string
+    deviceName: string
+    lastPulledAt: string | null
+  }
+  gcApiLeiloesSync: Record<
+    string,
+    {
+      status: 'success' | 'error'
+      lastSyncedAt: string | null
+      lastError: string | null
+      updatedAt: string
+    }
+  >
 }
 
 type ElectronStoreInstance = {
@@ -120,7 +138,14 @@ export async function getStore() {
           nome: 'Sprint Sales',
           url: 'https://leilaosprintsales.com.br/api/leiloes-ativos'
         }
-      ]
+      ],
+      gcApi: {
+        baseUrl: GC_API_DEFAULT_BASE_URL,
+        accessToken: '',
+        deviceName: GC_API_DEFAULT_DEVICE_NAME,
+        lastPulledAt: null
+      },
+      gcApiLeiloesSync: {}
     }
   })
 

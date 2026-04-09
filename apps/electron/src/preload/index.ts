@@ -43,6 +43,9 @@ type Leilao = {
   cotacao: number | null
   multiplicador: number
   total_animais: number
+  gc_sync_status?: 'success' | 'error' | null
+  gc_sync_at?: string | null
+  gc_sync_error?: string | null
   criado_em: string
   atualizado_em: string
 }
@@ -125,6 +128,23 @@ type ApiImportProviderPayload = {
   url: string
 }
 
+type GcApiConfigPayload = {
+  baseUrl: string
+  accessToken: string
+  deviceName: string
+  lastPulledAt: string | null
+}
+
+type GcApiSyncSummaryPayload = {
+  pushed: number
+  pulled: number
+  created: number
+  updated: number
+  deleted: number
+  skipped: number
+  serverTime: string | null
+}
+
 // Custom APIs for renderer
 const api = {}
 
@@ -179,6 +199,9 @@ if (process.contextIsolated) {
       getApiImportProviders: () => ipcRenderer.invoke('config:getApiImportProviders'),
       setApiImportProviders: (providers: ApiImportProviderConfigPayload[]) =>
         ipcRenderer.invoke('config:setApiImportProviders', providers),
+      getGcApi: () => ipcRenderer.invoke('config:getGcApi'),
+      setGcApi: (config: GcApiConfigPayload) => ipcRenderer.invoke('config:setGcApi', config),
+      testGcApi: (config: GcApiConfigPayload) => ipcRenderer.invoke('config:testGcApi', config),
       getLayoutAnimais: (leilaoId: string) => ipcRenderer.invoke('config:getLayoutAnimais', leilaoId),
       setLayoutAnimais: (
         leilaoId: string,
@@ -203,6 +226,12 @@ if (process.contextIsolated) {
         ipcRenderer.invoke('animais:atualizarEmLote', payloads),
       remover: (id: string) => ipcRenderer.invoke('animais:remover', id),
       removerPorLeilao: (leilaoId: string) => ipcRenderer.invoke('animais:removerPorLeilao', leilaoId)
+    })
+
+    contextBridge.exposeInMainWorld('gcSync', {
+      sincronizarTudo: (): Promise<GcApiSyncSummaryPayload> => ipcRenderer.invoke('gc-sync:sincronizarTudo'),
+      sincronizarLeilao: (leilaoId: string): Promise<GcApiSyncSummaryPayload> =>
+        ipcRenderer.invoke('gc-sync:sincronizarLeilao', leilaoId)
     })
 
     contextBridge.exposeInMainWorld('importacao', {

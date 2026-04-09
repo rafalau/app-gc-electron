@@ -195,6 +195,7 @@ export function useLeiloes() {
     aba,
     busca,
     leiloesFiltrados,
+    carregar,
 
     modalAberto,
     modalModo,

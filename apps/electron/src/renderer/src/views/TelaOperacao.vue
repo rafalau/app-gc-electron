@@ -2,6 +2,7 @@
 import { computed, nextTick, onBeforeUnmount, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useAnimais } from '@renderer/composables/useAnimais'
+import { getFriendlyErrorMessage } from '@renderer/utils/errorMessage'
 import { applyUppercaseInput } from '@renderer/utils/uppercaseInput'
 import {
   formatarGenealogiaParaExibicao,
@@ -349,7 +350,7 @@ async function iniciarRealtimeConfigVmix() {
       formVmix.value = await obterConfiguracaoVmix()
       await sincronizarPlaybackSrtPlayerComReconexao()
     } catch (error) {
-      erroOperacao.value = (error as Error).message
+      erroOperacao.value = getFriendlyErrorMessage(error)
     }
   }
 
@@ -385,7 +386,7 @@ async function recarregarSrtPlayerManual() {
     formVmix.value = await obterConfiguracaoVmix()
     await sincronizarPlaybackSrtPlayerComReconexao({ propagarErroFinal: true })
   } catch (error) {
-    erroOperacao.value = (error as Error).message
+    erroOperacao.value = getFriendlyErrorMessage(error)
   } finally {
     recarregandoSrt.value = false
   }
@@ -565,7 +566,7 @@ async function enviarOverlayGc() {
     }
     await acionarOverlayVmix(config)
   } catch (error) {
-    erroOperacao.value = (error as Error).message
+    erroOperacao.value = getFriendlyErrorMessage(error)
   } finally {
     acionandoOverlayVmix.value = false
     focarCampoLance()
@@ -909,7 +910,7 @@ async function sincronizarArquivo() {
     arquivoInfo.value = await atualizarArquivoOperacao(leilaoId, payload)
     erroOperacao.value = ''
   } catch (error) {
-    erroOperacao.value = (error as Error).message
+    erroOperacao.value = getFriendlyErrorMessage(error)
   }
 }
 
@@ -1014,7 +1015,7 @@ onMounted(async () => {
     await iniciarRealtimeOperacao()
     await iniciarRealtimeConfigVmix()
   } catch (error) {
-    erroOperacao.value = (error as Error).message
+    erroOperacao.value = getFriendlyErrorMessage(error)
     const conexao = await obterConexaoOperacao()
     if (conexao.modo === 'REMOTO') {
       router.replace({
