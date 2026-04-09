@@ -20,6 +20,7 @@ type AnimalCriarPayload = {
   pelagem: string
   nascimento: string
   altura: string
+  peso: string
   informacoes: string
   genealogia: string
   condicoes_cobertura: string[]
@@ -36,6 +37,15 @@ function upper(value?: string | null) {
 
 function upperList(values?: string[] | null) {
   return Array.isArray(values) ? values.map((item) => upper(item)).filter(Boolean) : []
+}
+
+function normalizarNascimentoTexto(value?: string | null) {
+  const texto = String(value ?? '').trim().toUpperCase()
+  const matchIso = texto.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  if (!matchIso) return texto
+
+  const [, ano, mes, dia] = matchIso
+  return `${dia}/${mes}/${ano}`
 }
 
 function normalizeVendedor(value?: string | null) {
@@ -66,6 +76,7 @@ function normalizarPayloadCriar(payload: AnimalCriarPayload): AnimalCriarPayload
     pelagem: upper(payload.pelagem),
     nascimento: upper(payload.nascimento),
     altura: upper(payload.altura),
+    peso: upper(payload.peso),
     informacoes: upper(payload.informacoes),
     genealogia: upper(payload.genealogia),
     condicoes_cobertura: upperList(payload.condicoes_cobertura)
@@ -87,6 +98,7 @@ function normalizarPayloadAtualizar(payload: AnimalAtualizarPayload): AnimalAtua
     ...(payload.pelagem !== undefined ? { pelagem: upper(payload.pelagem) } : {}),
     ...(payload.nascimento !== undefined ? { nascimento: upper(payload.nascimento) } : {}),
     ...(payload.altura !== undefined ? { altura: upper(payload.altura) } : {}),
+    ...(payload.peso !== undefined ? { peso: upper(payload.peso) } : {}),
     ...(payload.informacoes !== undefined ? { informacoes: upper(payload.informacoes) } : {}),
     ...(payload.genealogia !== undefined ? { genealogia: upper(payload.genealogia) } : {}),
     ...(payload.condicoes_cobertura !== undefined
@@ -115,6 +127,7 @@ function parseInformacoesAgregadas(informacoes: string) {
     .split('|')
     .map((parte) => parte.trim())
   let altura = ''
+  let peso = ''
   const partes = partesBrutas.filter(Boolean).filter((parte) => {
     const matchAltura = parte.match(/^ALTURA\s*:\s*(.+)$/i)
     if (matchAltura) {
@@ -122,21 +135,32 @@ function parseInformacoesAgregadas(informacoes: string) {
       return false
     }
 
+    const matchPeso = parte.match(/^PESO\s*:\s*(.+)$/i)
+    if (matchPeso) {
+      peso = matchPeso[1].trim()
+      return false
+    }
+
     return !/^(INFO|LOCAL|CIDADE(?:\/UF)?|UF)\s*:/i.test(parte)
   })
 
   if (partesBrutas.length >= 4 || (partesBrutas.length > 1 && partesBrutas.some((parte) => parte === ''))) {
-    const [, , , , alturaPosicional = ''] = partesBrutas
+    const [, , , , alturaPosicional = '', pesoPosicional = ''] = partesBrutas
     return {
-      altura: altura || alturaPosicional.trim()
+      altura: altura || alturaPosicional.trim(),
+      peso: peso || pesoPosicional.trim()
     }
   }
 
-  if (partes.length >= 5) {
-    return { altura: altura || partes[4] }
+  if (partes.length >= 6) {
+    return { altura: altura || partes[4], peso: peso || partes[5] }
   }
 
-  return { altura }
+  if (partes.length >= 5) {
+    return { altura: altura || partes[4], peso }
+  }
+
+  return { altura, peso }
 }
 
 function compararLote(a: string, b: string) {
@@ -186,8 +210,9 @@ function serializar(animal: any) {
     raca: animal.raca ?? '',
     sexo: animal.sexo ?? '',
     pelagem: animal.pelagem ?? '',
-    nascimento: animal.nascimento ?? '',
-    altura: parsedInformacoes.altura,
+    nascimento: normalizarNascimentoTexto(animal.nascimento),
+    altura: animal.altura ?? parsedInformacoes.altura ?? '',
+    peso: animal.peso ?? parsedInformacoes.peso ?? '',
     condicoes_cobertura: condicoesCobertura,
     criado_em: animal.criado_em instanceof Date ? animal.criado_em.toISOString() : animal.criado_em,
     atualizado_em:
@@ -211,6 +236,8 @@ export async function listarAnimaisPorLeilaoLocal(leilaoId: string) {
         sexo,
         pelagem,
         nascimento,
+        altura,
+        peso,
         informacoes,
         genealogia,
         condicoes_cobertura,
@@ -246,12 +273,14 @@ export async function criarAnimalLocal(payload: AnimalCriarPayload) {
         sexo,
         pelagem,
         nascimento,
+        altura,
+        peso,
         informacoes,
         genealogia,
         condicoes_cobertura,
         criado_em,
         atualizado_em
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
     id,
     payloadNormalizado.leilao_id,
@@ -264,6 +293,8 @@ export async function criarAnimalLocal(payload: AnimalCriarPayload) {
     payloadNormalizado.sexo ?? '',
     payloadNormalizado.pelagem ?? '',
     payloadNormalizado.nascimento ?? '',
+    payloadNormalizado.altura ?? '',
+    payloadNormalizado.peso ?? '',
     payloadNormalizado.informacoes ?? '',
     payloadNormalizado.genealogia ?? '',
     JSON.stringify(payloadNormalizado.condicoes_cobertura ?? []),
@@ -285,6 +316,8 @@ export async function criarAnimalLocal(payload: AnimalCriarPayload) {
         sexo,
         pelagem,
         nascimento,
+        altura,
+        peso,
         informacoes,
         genealogia,
         condicoes_cobertura,
@@ -317,6 +350,8 @@ export async function atualizarAnimalLocal(id: string, payload: AnimalAtualizarP
         sexo = COALESCE(?, sexo),
         pelagem = COALESCE(?, pelagem),
         nascimento = COALESCE(?, nascimento),
+        altura = COALESCE(?, altura),
+        peso = COALESCE(?, peso),
         informacoes = COALESCE(?, informacoes),
         genealogia = COALESCE(?, genealogia),
         condicoes_cobertura = COALESCE(?, condicoes_cobertura),
@@ -332,6 +367,8 @@ export async function atualizarAnimalLocal(id: string, payload: AnimalAtualizarP
     payloadNormalizado.sexo ?? null,
     payloadNormalizado.pelagem ?? null,
     payloadNormalizado.nascimento ?? null,
+    payloadNormalizado.altura ?? null,
+    payloadNormalizado.peso ?? null,
     payloadNormalizado.informacoes ?? null,
     payloadNormalizado.genealogia ?? null,
     payloadNormalizado.condicoes_cobertura
@@ -355,6 +392,8 @@ export async function atualizarAnimalLocal(id: string, payload: AnimalAtualizarP
         sexo,
         pelagem,
         nascimento,
+        altura,
+        peso,
         informacoes,
         genealogia,
         condicoes_cobertura,

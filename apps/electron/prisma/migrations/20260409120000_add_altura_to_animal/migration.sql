@@ -1,0 +1,1 @@
+ALTER TABLE "Animal" ADD COLUMN "altura" TEXT NOT NULL DEFAULT '';

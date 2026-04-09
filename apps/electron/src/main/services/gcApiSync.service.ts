@@ -37,6 +37,7 @@ type RemoteAnimal = {
   birth_date?: string | null
   seller?: string | null
   height?: string | null
+  weight?: string | null
   aggregated_info?: string | null
   genealogy?: string | null
   payment_terms_specific?: string | null
@@ -215,6 +216,7 @@ async function pushLeilaoLocal(
           birth_date: normalizarDataParaApi(animal.nascimento),
           seller: normalizarTextoOpcional(animal.vendedor),
           height: normalizarTextoOpcional(animal.altura),
+          weight: normalizarTextoOpcional(animal.peso),
           aggregated_info: normalizarTextoOpcional(animal.informacoes),
           genealogy: normalizarTextoOpcional(animal.genealogia),
           payment_terms_specific: normalizarTextoOpcional(animal.condicoes_pagamento_especificas),
@@ -296,12 +298,14 @@ async function upsertAnimalRemoto(leilaoId: string, remote: RemoteAnimal) {
         sexo,
         pelagem,
         nascimento,
+        altura,
+        peso,
         informacoes,
         genealogia,
         condicoes_cobertura,
         criado_em,
         atualizado_em
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
       ON CONFLICT(id) DO UPDATE SET
         leilao_id = excluded.leilao_id,
         lote = excluded.lote,
@@ -313,6 +317,8 @@ async function upsertAnimalRemoto(leilaoId: string, remote: RemoteAnimal) {
         sexo = excluded.sexo,
         pelagem = excluded.pelagem,
         nascimento = excluded.nascimento,
+        altura = excluded.altura,
+        peso = excluded.peso,
         informacoes = excluded.informacoes,
         genealogia = excluded.genealogia,
         atualizado_em = excluded.atualizado_em
@@ -328,6 +334,8 @@ async function upsertAnimalRemoto(leilaoId: string, remote: RemoteAnimal) {
     upper(remote.sex),
     upper(remote.coat),
     upper(remote.birth_date),
+    upper(remote.height),
+    upper(remote.weight),
     upper(remote.aggregated_info),
     upper(remote.genealogy),
     '[]',

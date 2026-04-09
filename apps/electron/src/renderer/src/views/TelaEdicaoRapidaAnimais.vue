@@ -25,7 +25,7 @@ const baseUrl = searchParams.get('baseUrl') ?? ''
 const carregando = ref(true)
 const salvando = ref(false)
 const tituloLeilao = ref('Modo Conferência')
-const layoutModo = ref<LayoutInformacoesAnimais>('AGREGADAS')
+const layoutModo = ref<LayoutInformacoesAnimais>('SEPARADAS')
 const busca = ref('')
 const erro = ref('')
 const linhas = ref<LinhaEdicaoRapida[]>([])
@@ -38,11 +38,6 @@ let ignorarConflitosAte = 0
 type LeilaoQuickEdit = {
   id: string
   titulo_evento: string
-}
-
-type LayoutAnimaisConfig = {
-  modo: LayoutInformacoesAnimais
-  incluirRacaNasImportacoes: boolean
 }
 
 async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
@@ -130,6 +125,7 @@ function serializarAnimal(animal: Animal) {
     pelagem: animal.pelagem,
     nascimento: animal.nascimento,
     altura: animal.altura,
+    peso: animal.peso,
     informacoes: formatarInformacoesParaExibicao(animal.informacoes),
     genealogia: animal.genealogia,
     condicoes_cobertura: animal.condicoes_cobertura
@@ -148,6 +144,7 @@ function serializarLinha(linha: LinhaEdicaoRapida) {
     pelagem: linha.pelagem,
     nascimento: linha.nascimento,
     altura: linha.altura,
+    peso: linha.peso,
     informacoes: linha.informacoes,
     genealogia: linha.genealogia,
     condicoes_cobertura: normalizarCondicoesTexto(linha.condicoesTexto)
@@ -156,10 +153,10 @@ function serializarLinha(linha: LinhaEdicaoRapida) {
 
 function criarLinha(animal: Animal): LinhaEdicaoRapida {
   const precisaExtrairCamposEstruturados =
-    !animal.raca && !animal.sexo && !animal.pelagem && !animal.nascimento && !animal.altura
+    !animal.raca && !animal.sexo && !animal.pelagem && !animal.nascimento && !animal.altura && !animal.peso
   const parsed = precisaExtrairCamposEstruturados
     ? parseInformacoesAgregadas(animal.informacoes)
-    : { raca: '', sexo: '', pelagem: '', nascimento: '', altura: '' }
+    : { raca: '', sexo: '', pelagem: '', nascimento: '', altura: '', peso: '' }
 
   return {
     ...animal,
@@ -169,6 +166,7 @@ function criarLinha(animal: Animal): LinhaEdicaoRapida {
     pelagem: precisaExtrairCamposEstruturados ? parsed.pelagem : animal.pelagem,
     nascimento: precisaExtrairCamposEstruturados ? parsed.nascimento : animal.nascimento,
     altura: precisaExtrairCamposEstruturados ? parsed.altura : animal.altura,
+    peso: precisaExtrairCamposEstruturados ? parsed.peso : animal.peso,
     condicoesTexto: animal.condicoes_cobertura.join('\n'),
     baseAtualizadoEm: animal.atualizado_em,
     conflitoExterno: false
@@ -205,14 +203,13 @@ async function carregarDados(opcoes?: { preservarRascunho?: boolean }) {
   }
 
   try {
-    const [leilao, animais, layout] = await Promise.all([
+    const [leilao, animais] = await Promise.all([
       fetchJson<LeilaoQuickEdit | null>(`/sync/leiloes/${encodeURIComponent(leilaoId)}`),
-      fetchJson<Animal[]>(`/sync/animais/${encodeURIComponent(leilaoId)}`),
-      fetchJson<LayoutAnimaisConfig>(`/sync/layout/${encodeURIComponent(leilaoId)}`)
+      fetchJson<Animal[]>(`/sync/animais/${encodeURIComponent(leilaoId)}`)
     ])
 
     tituloLeilao.value = leilao?.titulo_evento || 'Modo Conferência'
-    layoutModo.value = layout?.modo === 'SEPARADAS' ? 'SEPARADAS' : 'AGREGADAS'
+    layoutModo.value = 'SEPARADAS'
 
     const linhasAtuais = new Map(linhas.value.map((linha) => [linha.id, linha]))
     const linhasSujas = new Set(
@@ -365,16 +362,14 @@ async function salvarTudo() {
       return
     }
 
-    const informacoes =
-      layoutModo.value === 'SEPARADAS'
-        ? buildInformacoesAgregadas({
-            raca: linha.raca,
-            sexo: linha.sexo,
-            pelagem: linha.pelagem,
-            nascimento: linha.nascimento,
-            altura: linha.altura
-          })
-        : linha.informacoes
+    const informacoes = buildInformacoesAgregadas({
+      raca: linha.raca,
+      sexo: linha.sexo,
+      pelagem: linha.pelagem,
+      nascimento: linha.nascimento,
+      altura: linha.altura,
+      peso: linha.peso
+    })
 
     payloads.push({
       id: linha.id,
@@ -388,6 +383,7 @@ async function salvarTudo() {
       pelagem: linha.pelagem,
       nascimento: linha.nascimento,
       altura: linha.altura,
+      peso: linha.peso,
       informacoes,
       genealogia: linha.genealogia,
       condicoes_cobertura: condicoes
@@ -554,8 +550,8 @@ onUnmounted(() => {
               </div>
             </div>
 
-            <div v-if="layoutModo === 'SEPARADAS'" class="space-y-4">
-              <div class="grid grid-cols-1 gap-4 sm:grid-cols-2">
+            <div class="space-y-4">
+              <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
                 <div>
                   <div class="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
                     Raça
@@ -568,7 +564,19 @@ onUnmounted(() => {
                   />
                 </div>
 
-                <div>
+                <div class="sm:order-3">
+                  <div class="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                    Sexo
+                  </div>
+                  <input
+                    v-model="linha.sexo"
+                    class="campo-grid w-full"
+                    type="text"
+                    @input="linha.sexo = normalizarTexto(linha.sexo)"
+                  />
+                </div>
+
+                <div class="sm:order-2">
                   <div class="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
                     Pelagem
                   </div>
@@ -584,18 +592,6 @@ onUnmounted(() => {
               <div class="grid grid-cols-1 gap-4 sm:grid-cols-3">
                 <div>
                   <div class="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
-                    Sexo
-                  </div>
-                  <input
-                    v-model="linha.sexo"
-                    class="campo-grid w-full"
-                    type="text"
-                    @input="linha.sexo = normalizarTexto(linha.sexo)"
-                  />
-                </div>
-
-                <div>
-                  <div class="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
                     Nascimento
                   </div>
                   <input
@@ -606,7 +602,19 @@ onUnmounted(() => {
                   />
                 </div>
 
-                <div>
+                <div class="sm:order-3">
+                  <div class="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
+                    Peso
+                  </div>
+                  <input
+                    v-model="linha.peso"
+                    class="campo-grid w-full"
+                    type="text"
+                    @input="linha.peso = normalizarTexto(linha.peso)"
+                  />
+                </div>
+
+                <div class="sm:order-2">
                   <div class="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
                     Altura
                   </div>
@@ -618,18 +626,6 @@ onUnmounted(() => {
                   />
                 </div>
               </div>
-            </div>
-
-            <div v-else>
-              <div class="mb-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-500">
-                Informações
-              </div>
-              <input
-                v-model="linha.informacoes"
-                class="campo-grid w-full"
-                type="text"
-                @input="linha.informacoes = normalizarTexto(linha.informacoes)"
-              />
             </div>
 
             <div>
@@ -737,5 +733,3 @@ onUnmounted(() => {
 }
 
 </style>
-
-

@@ -41,6 +41,7 @@ const formLocal = reactive<AnimalCriarPayload>({
   pelagem: '',
   nascimento: '',
   altura: '',
+  peso: '',
   informacoes: '',
   genealogia: '',
   condicoes_cobertura: []
@@ -65,24 +66,19 @@ function sincronizarForm() {
   formLocal.pelagem = props.form.pelagem
   formLocal.nascimento = props.form.nascimento
   formLocal.altura = props.form.altura
+  formLocal.peso = props.form.peso
   formLocal.informacoes = props.form.informacoes
   formLocal.genealogia = props.form.genealogia
   formLocal.condicoes_cobertura = [...props.form.condicoes_cobertura]
 
-  if (
-    props.layoutModo === 'SEPARADAS' &&
-    !formLocal.raca &&
-    !formLocal.sexo &&
-    !formLocal.pelagem &&
-    !formLocal.nascimento &&
-    !formLocal.altura
-  ) {
+  if (!formLocal.raca && !formLocal.sexo && !formLocal.pelagem && !formLocal.nascimento && !formLocal.altura && !formLocal.peso) {
     const parsed = parseInformacoesAgregadas(props.form.informacoes)
     formLocal.raca = parsed.raca
     formLocal.sexo = parsed.sexo
     formLocal.pelagem = parsed.pelagem
     formLocal.nascimento = parsed.nascimento
     formLocal.altura = parsed.altura
+    formLocal.peso = parsed.peso
   }
 
   novaCondicao.value = ''
@@ -106,16 +102,14 @@ watch(
 )
 
 function salvar() {
-  const informacoes =
-    props.layoutModo === 'SEPARADAS'
-      ? buildInformacoesAgregadas({
-          raca: formLocal.raca,
-          sexo: formLocal.sexo,
-          pelagem: formLocal.pelagem,
-          nascimento: formLocal.nascimento,
-          altura: formLocal.altura
-        })
-      : formLocal.informacoes
+  const informacoes = buildInformacoesAgregadas({
+    raca: formLocal.raca,
+    sexo: formLocal.sexo,
+    pelagem: formLocal.pelagem,
+    nascimento: formLocal.nascimento,
+    altura: formLocal.altura,
+    peso: formLocal.peso
+  })
 
   emit('salvar', {
     ...formLocal,
@@ -163,14 +157,13 @@ async function importarStudbook(registro: string) {
     formLocal.nome = payload.nome
     formLocal.informacoes = payload.informacoes
     formLocal.genealogia = payload.genealogia
-    if (props.layoutModo === 'SEPARADAS') {
-      const parsed = parseInformacoesAgregadas(payload.informacoes)
-      formLocal.raca = parsed.raca
-      formLocal.sexo = parsed.sexo
-      formLocal.pelagem = parsed.pelagem
-      formLocal.nascimento = parsed.nascimento
-      formLocal.altura = parsed.altura
-    }
+    const parsed = parseInformacoesAgregadas(payload.informacoes)
+    formLocal.raca = parsed.raca
+    formLocal.sexo = parsed.sexo
+    formLocal.pelagem = parsed.pelagem
+    formLocal.nascimento = parsed.nascimento
+    formLocal.altura = parsed.altura
+    formLocal.peso = parsed.peso
     studbookAberto.value = false
   } catch (error) {
     studbookErro.value = getFriendlyErrorMessage(error)
@@ -308,20 +301,7 @@ async function importarStudbook(registro: string) {
         />
       </div>
 
-      <div v-if="layoutModo === 'AGREGADAS'" class="col-span-12">
-        <label class="block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500 mb-2">
-          Informações
-        </label>
-        <input
-          v-model="formLocal.informacoes"
-          class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800 shadow-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100"
-          type="text"
-          @input="applyUppercaseInput($event, (value) => (formLocal.informacoes = value))"
-        />
-      </div>
-
-      <template v-else>
-        <div class="col-span-12 grid grid-cols-1 gap-5 md:grid-cols-2">
+      <div class="col-span-12 grid grid-cols-1 gap-5 md:grid-cols-3">
           <div>
             <label class="block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500 mb-2">
               Raça
@@ -334,21 +314,7 @@ async function importarStudbook(registro: string) {
             />
           </div>
 
-          <div>
-            <label class="block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500 mb-2">
-              Pelagem
-            </label>
-            <input
-              v-model="formLocal.pelagem"
-              class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800 shadow-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100"
-              type="text"
-              @input="applyUppercaseInput($event, (value) => (formLocal.pelagem = value))"
-            />
-          </div>
-        </div>
-
-        <div class="col-span-12 grid grid-cols-1 gap-5 md:grid-cols-3">
-          <div>
+          <div class="md:order-3">
             <label class="block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500 mb-2">
               Sexo
             </label>
@@ -360,6 +326,20 @@ async function importarStudbook(registro: string) {
             />
           </div>
 
+          <div class="md:order-2">
+            <label class="block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500 mb-2">
+              Pelagem
+            </label>
+            <input
+              v-model="formLocal.pelagem"
+              class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800 shadow-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100"
+              type="text"
+              @input="applyUppercaseInput($event, (value) => (formLocal.pelagem = value))"
+            />
+          </div>
+      </div>
+
+      <div class="col-span-12 grid grid-cols-1 gap-5 md:grid-cols-3">
           <div>
             <label class="block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500 mb-2">
               Nascimento
@@ -372,7 +352,19 @@ async function importarStudbook(registro: string) {
             />
           </div>
 
-          <div>
+          <div class="md:order-3">
+            <label class="block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500 mb-2">
+              Peso
+            </label>
+            <input
+              v-model="formLocal.peso"
+              class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800 shadow-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100"
+              type="text"
+              @input="applyUppercaseInput($event, (value) => (formLocal.peso = value))"
+            />
+          </div>
+
+          <div class="md:order-2">
             <label class="block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500 mb-2">
               Altura
             </label>
@@ -383,8 +375,7 @@ async function importarStudbook(registro: string) {
               @input="applyUppercaseInput($event, (value) => (formLocal.altura = value))"
             />
           </div>
-        </div>
-      </template>
+      </div>
 
       <div class="col-span-12">
         <label class="block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500 mb-2">
@@ -482,6 +473,3 @@ async function importarStudbook(registro: string) {
   filter: blur(6px);
 }
 </style>
-
-
-

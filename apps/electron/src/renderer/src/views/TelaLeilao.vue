@@ -52,7 +52,6 @@ const {
   apiImportProviders,
   apiImportHasConfiguredProviders,
   layoutInformacoesModo,
-  incluirRacaNasImportacoes,
   abrirCriar,
   abrirEditar,
   fecharModal,
@@ -74,8 +73,7 @@ const tituloPagina = computed(() => leilao.value?.titulo_evento || 'Leilão')
 const limparAberto = ref(false)
 const configuracoesAbertas = ref(false)
 const confirmacaoLimpar = ref('')
-const layoutModoDraft = ref<'AGREGADAS' | 'SEPARADAS'>('AGREGADAS')
-const incluirRacaDraft = ref(false)
+const layoutModoDraft = ref<'AGREGADAS' | 'SEPARADAS'>('SEPARADAS')
 const modoAtual = ref<'HOST' | 'REMOTO' | null>(null)
 const apiProvidersDraft = ref<ApiImportProviderConfig[]>([])
 const importItems = computed(() => {
@@ -106,7 +104,7 @@ const importItems = computed(() => {
 const gerenciarItems = computed(() => {
   const items: DropdownItem[] = [
     {
-      label: 'Configurações',
+      label: 'Configurações de API',
       icon: 'fa-sliders-h',
       action: () => {
         abrirConfiguracoes()
@@ -170,8 +168,7 @@ function abrirConfiguracoes() {
     return
   }
 
-  layoutModoDraft.value = layoutInformacoesModo.value
-  incluirRacaDraft.value = incluirRacaNasImportacoes.value
+  layoutModoDraft.value = 'SEPARADAS'
   void (async () => {
     apiProvidersDraft.value = await obterApiImportProviders()
     configuracoesAbertas.value = true
@@ -184,7 +181,7 @@ function fecharConfiguracoes() {
 
 async function salvarConfiguracoes() {
   await salvarApiImportProviders(apiProvidersDraft.value)
-  await salvarConfiguracaoLayout(layoutModoDraft.value, incluirRacaDraft.value)
+  await salvarConfiguracaoLayout(layoutModoDraft.value, true)
   await carregarProvidersApi()
   configuracoesAbertas.value = false
 }
@@ -367,57 +364,12 @@ onMounted(async () => {
 
     <ImportSummaryModal :aberto="resumoAberto" :resumo="resumoImportacao" @fechar="fecharResumo" />
 
-    <BaseModal :aberto="configuracoesAbertas" titulo="Configurações dos Animais" @fechar="fecharConfiguracoes">
+    <BaseModal :aberto="configuracoesAbertas" titulo="Configurações de API" @fechar="fecharConfiguracoes">
       <div class="space-y-5">
-        <div class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
-          <div class="text-sm font-semibold text-slate-900">Layout das informações</div>
-          <div class="mt-1 text-xs text-slate-500">
-            Escolha como a tabela e o formulário dos animais devem ser exibidos neste leilão.
-          </div>
-
-          <div class="mt-4 grid gap-3">
-            <label class="flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 bg-white p-4 transition hover:border-blue-300 hover:bg-blue-50/40">
-              <input v-model="layoutModoDraft" type="radio" value="AGREGADAS" class="mt-1 h-4 w-4" />
-              <div>
-                <div class="text-sm font-semibold text-slate-900">Informações agregadas</div>
-                <div class="text-xs text-slate-500">
-                  Mantém o bloco único de informações, como já funciona hoje.
-                </div>
-              </div>
-            </label>
-
-            <label class="flex cursor-pointer items-start gap-3 rounded-2xl border border-slate-200 bg-white p-4 transition hover:border-blue-300 hover:bg-blue-50/40">
-              <input v-model="layoutModoDraft" type="radio" value="SEPARADAS" class="mt-1 h-4 w-4" />
-              <div>
-                <div class="text-sm font-semibold text-slate-900">Informações separadas</div>
-                <div class="text-xs text-slate-500">
-                  Mostra raça, sexo, pelagem e nascimento em campos e colunas distintas.
-                </div>
-              </div>
-            </label>
-          </div>
-        </div>
-
-        <div
-          v-if="layoutModoDraft === 'AGREGADAS'"
-          class="rounded-2xl border border-slate-200 bg-slate-50 p-4"
-        >
-          <label class="flex cursor-pointer items-start gap-3">
-            <input v-model="incluirRacaDraft" type="checkbox" class="mt-1 h-4 w-4 rounded" />
-            <div>
-              <div class="text-sm font-semibold text-slate-900">Incluir raça nas importações</div>
-              <div class="text-xs text-slate-500">
-                Vale só para importação. Quando marcado, a raça entra no começo de
-                <span class="font-semibold">Informações</span>.
-              </div>
-            </div>
-          </label>
-        </div>
-
         <div class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
           <div class="flex items-center justify-between gap-4">
             <div>
-              <div class="text-sm font-semibold text-slate-900">APIs no padrão TBS</div>
+              <div class="text-sm font-semibold text-slate-900">Configurações de APIs</div>
               <div class="mt-1 text-[11px] leading-4 text-slate-500">
                 Cadastre e ordene as APIs do menu <span class="font-semibold">Importar API</span>.
               </div>

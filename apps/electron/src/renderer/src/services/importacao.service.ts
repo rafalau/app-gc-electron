@@ -8,7 +8,7 @@ import type {
 
 export async function importarExcel(
   leilaoId: string,
-  incluirRacaNasInformacoes = false
+  incluirRacaNasInformacoes = true
 ): Promise<ImportSummary | null> {
   return window.importacao.excel(leilaoId, incluirRacaNasInformacoes)
 }
@@ -25,7 +25,7 @@ export async function importarLeilaoApi(
   leilaoId: string,
   provider: ApiImportProviderOption,
   auctionId: number,
-  incluirRacaNasInformacoes = false
+  incluirRacaNasInformacoes = true
 ): Promise<ImportSummary> {
   return window.importacao.importarLeilaoApi(
     leilaoId,

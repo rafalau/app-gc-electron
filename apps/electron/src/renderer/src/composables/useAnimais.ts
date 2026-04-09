@@ -59,6 +59,7 @@ function criarFormVazio(leilaoId: string): AnimalCriarPayload {
     pelagem: '',
     nascimento: '',
     altura: '',
+    peso: '',
     informacoes: '',
     genealogia: '',
     condicoes_cobertura: []
@@ -143,8 +144,8 @@ export function useAnimais(leilaoId: string) {
   const apiImportSelectedProviderId = ref<string>('')
   const apiImportSelectedAuctionId = ref<number | null>(null)
   const apiImportHasConfiguredProviders = computed(() => apiImportProviders.value.length > 0)
-  const layoutInformacoesModo = ref<LayoutInformacoesAnimais>('AGREGADAS')
-  const incluirRacaNasImportacoes = ref(false)
+  const layoutInformacoesModo = ref<LayoutInformacoesAnimais>('SEPARADAS')
+  const incluirRacaNasImportacoes = ref(true)
   let eventSource: EventSource | null = null
   let primeiroEventoSyncRecebido = false
 
@@ -170,15 +171,14 @@ export function useAnimais(leilaoId: string) {
   async function carregar() {
     carregando.value = true
     try {
-      const [leilaoAtual, lista, layout] = await Promise.all([
+      const [leilaoAtual, lista] = await Promise.all([
         obterLeilao(leilaoId),
-        listarAnimaisPorLeilao(leilaoId),
-        window.config.getLayoutAnimais(leilaoId)
+        listarAnimaisPorLeilao(leilaoId)
       ])
       leilao.value = leilaoAtual
       animais.value = lista
-      layoutInformacoesModo.value = layout.modo
-      incluirRacaNasImportacoes.value = layout.incluirRacaNasImportacoes
+      layoutInformacoesModo.value = 'SEPARADAS'
+      incluirRacaNasImportacoes.value = true
     } catch (error) {
       if (erroDeConexaoRemota(error)) {
         router.replace({
@@ -244,6 +244,7 @@ export function useAnimais(leilaoId: string) {
       pelagem: animal.pelagem,
       nascimento: animal.nascimento,
       altura: animal.altura,
+      peso: animal.peso,
       informacoes: animal.informacoes,
       genealogia: animal.genealogia,
       condicoes_cobertura: [...animal.condicoes_cobertura]
@@ -260,7 +261,7 @@ export function useAnimais(leilaoId: string) {
   }
 
   async function importarPlanilhaExcel() {
-    const resumo = await importarExcel(leilaoId, incluirRacaNasImportacoes.value)
+    const resumo = await importarExcel(leilaoId, true)
     if (!resumo) return
     resumoImportacao.value = resumo
     resumoAberto.value = true
@@ -318,7 +319,7 @@ export function useAnimais(leilaoId: string) {
         leilaoId,
         provider,
         apiImportSelectedAuctionId.value,
-        incluirRacaNasImportacoes.value
+        true
       )
       resumoImportacao.value = resumo
       resumoAberto.value = true
@@ -379,6 +380,7 @@ export function useAnimais(leilaoId: string) {
         pelagem: payloadNormalizado.pelagem,
         nascimento: payloadNormalizado.nascimento,
         altura: payloadNormalizado.altura,
+        peso: payloadNormalizado.peso,
         informacoes: payloadNormalizado.informacoes,
         genealogia: payloadNormalizado.genealogia,
         condicoes_cobertura: payloadNormalizado.condicoes_cobertura
@@ -456,12 +458,15 @@ export function useAnimais(leilaoId: string) {
     modo: LayoutInformacoesAnimais,
     incluirRaca: boolean
   ) {
+    void modo
+    void incluirRaca
+    const modoFixo: LayoutInformacoesAnimais = 'SEPARADAS'
     await window.config.setLayoutAnimais(leilaoId, {
-      modo,
-      incluirRacaNasImportacoes: incluirRaca
+      modo: modoFixo,
+      incluirRacaNasImportacoes: true
     })
-    layoutInformacoesModo.value = modo
-    incluirRacaNasImportacoes.value = incluirRaca
+    layoutInformacoesModo.value = modoFixo
+    incluirRacaNasImportacoes.value = true
   }
 
   return {

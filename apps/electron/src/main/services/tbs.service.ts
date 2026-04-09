@@ -77,6 +77,8 @@ function toAnimalInput(animal: TbsAuctionAnimal): AnimalImportInput {
     sexo: upper(animal.sexo),
     pelagem: upper(animal.pelagem),
     nascimento: String(animal.nascimento ?? '').trim().toUpperCase(),
+    altura: upper(animal.altura),
+    peso: upper(animal.peso),
     categoria: 'ANIMAIS',
     vendedor: getAuctionAnimalVendedor(animal),
     cidade_uf: upper(animal.cidade_alojamento),

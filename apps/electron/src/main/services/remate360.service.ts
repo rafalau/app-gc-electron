@@ -30,6 +30,8 @@ interface Remate360Animal {
   sexo?: string | null
   pelagem?: string | null
   nascimento?: string | null
+  altura?: string | null
+  peso?: string | null
   nome_proprietario?: string | null
   vendedor?: string | null
   genealogia?: Remate360Genealogia | null
@@ -85,9 +87,17 @@ function toAnimalInput(animal: Remate360Animal): AnimalImportInput {
     sexo: upper(animal.sexo),
     pelagem: upper(animal.pelagem),
     nascimento: String(animal.nascimento ?? '').trim().toUpperCase(),
+    altura: upper(animal.altura),
+    peso: upper(animal.peso),
     categoria: 'ANIMAIS',
     vendedor: upper(animal.vendedor ?? animal.nome_proprietario),
-    informacoes: '',
+    informacoes: joinNonEmpty(
+      [
+        animal.altura ? `ALTURA: ${upper(animal.altura)}` : '',
+        animal.peso ? `PESO: ${upper(animal.peso)}` : ''
+      ],
+      '   |   '
+    ),
     genealogia: buildGenealogia(animal.genealogia),
     condicoes_cobertura: []
   }

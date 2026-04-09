@@ -1,7 +1,6 @@
 <script setup lang="ts">
 import { onMounted, ref } from 'vue'
 import BaseButton from '@renderer/components/ui/BaseButton.vue'
-import BaseSwitch from '@renderer/components/ui/BaseSwitch.vue'
 import { applyUppercaseInput } from '@renderer/utils/uppercaseInput'
 import type { ApiImportProviderConfig } from '@renderer/types/importacao'
 
@@ -12,8 +11,6 @@ const baseUrl = searchParams.get('baseUrl') ?? ''
 const carregando = ref(true)
 const salvando = ref(false)
 const erro = ref('')
-const layoutModo = ref<'AGREGADAS' | 'SEPARADAS'>('AGREGADAS')
-const incluirRacaNasImportacoes = ref(false)
 const apiProviders = ref<ApiImportProviderConfig[]>([])
 
 async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
@@ -30,17 +27,15 @@ async function carregar() {
   erro.value = ''
 
   try {
-    const [layout, providers] = await Promise.all([
+    const [_, providers] = await Promise.all([
       fetchJson<{ modo: 'AGREGADAS' | 'SEPARADAS'; incluirRacaNasImportacoes: boolean }>(
         `/sync/layout/${encodeURIComponent(leilaoId)}`
       ),
       fetchJson<ApiImportProviderConfig[]>('/sync/config/api-providers')
     ])
 
-    layoutModo.value = layout.modo
-    incluirRacaNasImportacoes.value = Boolean(layout.incluirRacaNasImportacoes)
     apiProviders.value = Array.isArray(providers) ? providers : []
-    document.title = 'Configurações dos Animais'
+    document.title = 'Configurações de API'
   } catch (errorAtual) {
     erro.value = (errorAtual as Error).message
   } finally {
@@ -94,8 +89,8 @@ async function salvar() {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          modo: layoutModo.value,
-          incluirRacaNasImportacoes: incluirRacaNasImportacoes.value
+          modo: 'SEPARADAS',
+          incluirRacaNasImportacoes: true
         })
       })
     ])
@@ -120,7 +115,7 @@ onMounted(() => {
   <div class="min-h-screen bg-slate-100 p-4">
     <div class="mx-auto w-full max-w-4xl rounded-3xl border border-slate-200 bg-white shadow-sm">
       <div class="border-b border-slate-200 bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-5 text-white">
-        <div class="text-lg font-bold">Configurações dos Animais</div>
+        <div class="text-lg font-bold">Configurações de API</div>
       </div>
 
       <div class="px-6 py-6">
@@ -131,35 +126,10 @@ onMounted(() => {
         <div v-if="carregando" class="text-sm text-slate-500">Carregando...</div>
 
         <div v-else class="space-y-6">
-          <div class="grid grid-cols-12 gap-5">
-            <div class="col-span-12 md:col-span-7">
-              <label class="mb-2 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
-                Layout das Informações
-              </label>
-              <select
-                v-model="layoutModo"
-                class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800 shadow-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100"
-              >
-                <option value="AGREGADAS">Informações agregadas</option>
-                <option value="SEPARADAS">Campos separados</option>
-              </select>
-            </div>
-
-            <div class="col-span-12 md:col-span-5">
-              <div class="flex h-full items-center justify-between rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 shadow-sm">
-                <div>
-                  <div class="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Importação</div>
-                  <label class="mt-1 block text-sm font-medium text-slate-800">Incluir raça?</label>
-                </div>
-                <BaseSwitch v-model="incluirRacaNasImportacoes" />
-              </div>
-            </div>
-          </div>
-
           <div class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
             <div class="flex items-center justify-between gap-3">
               <div>
-                <div class="text-sm font-semibold text-slate-900">Provedores API</div>
+                <div class="text-sm font-semibold text-slate-900">Configurações de APIs</div>
                 <div class="text-xs text-slate-500">Ordem e endpoints usados na importação remota.</div>
               </div>
               <BaseButton variante="primario" @click="adicionarApiProvider">Adicionar</BaseButton>

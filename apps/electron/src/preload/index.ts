@@ -24,6 +24,7 @@ type AnimalCriarPayload = {
   pelagem: string
   nascimento: string
   altura: string
+  peso: string
   informacoes: string
   genealogia: string
   condicoes_cobertura: string[]
@@ -63,6 +64,7 @@ type Animal = {
   pelagem: string
   nascimento: string
   altura: string
+  peso: string
   informacoes: string
   genealogia: string
   condicoes_cobertura: string[]

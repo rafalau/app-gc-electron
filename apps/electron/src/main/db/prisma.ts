@@ -1,6 +1,7 @@
 import { app } from 'electron'
 import { join } from 'path'
 import { mkdirSync } from 'fs'
+import Database from 'better-sqlite3'
 import { PrismaClient } from '@prisma/client'
 import { PrismaBetterSqlite3 } from '@prisma/adapter-better-sqlite3'
 
@@ -34,6 +35,27 @@ function ensureDatabaseUrl() {
   process.env.DATABASE_URL = fileSqliteUrl(dbPath)
 }
 
+function ensureAnimalAlturaColumn(sqlitePath: string) {
+  const db = new Database(sqlitePath)
+
+  try {
+    const animalTable = db
+      .prepare(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'Animal' LIMIT 1`)
+      .get() as { name?: string } | undefined
+
+    if (!animalTable?.name) return
+
+    const columns = db.prepare(`PRAGMA table_info("Animal")`).all() as Array<{ name?: string }>
+    const hasAltura = columns.some((column) => column.name === 'altura')
+
+    if (!hasAltura) {
+      db.exec(`ALTER TABLE "Animal" ADD COLUMN "altura" TEXT NOT NULL DEFAULT ''`)
+    }
+  } finally {
+    db.close()
+  }
+}
+
 export async function getPrisma() {
   if (prisma) return prisma
   if (initPromise) return initPromise
@@ -41,6 +63,7 @@ export async function getPrisma() {
   initPromise = (async () => {
     ensureDatabaseUrl()
     const sqlitePath = sqlitePathFromInput(process.env.DATABASE_URL!)
+    ensureAnimalAlturaColumn(sqlitePath)
 
     const adapter = new PrismaBetterSqlite3({
       url: sqlitePath
@@ -56,4 +79,3 @@ export async function getPrisma() {
 
   return initPromise
 }
-

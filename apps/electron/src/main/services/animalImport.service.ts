@@ -10,6 +10,7 @@ export type AnimalImportInput = {
   pelagem?: string
   nascimento?: string
   altura?: string
+  peso?: string
   pai?: string
   mae?: string
   avo_materno?: string
@@ -46,6 +47,7 @@ const headerAliases: Record<string, keyof AnimalImportInput> = {
   datanascimento: 'nascimento',
   nascimentoanimal: 'nascimento',
   altura: 'altura',
+  peso: 'peso',
   pai: 'pai',
   mae: 'mae',
   avo3: 'avo_materno',
@@ -138,6 +140,7 @@ function normalizeInput(input: AnimalImportInput, options: ImportAnimaisOptions 
   const pelagem = normalizeString(input.pelagem).toUpperCase()
   const nascimento = normalizeString(input.nascimento).toUpperCase()
   const altura = normalizeString(input.altura).toUpperCase()
+  const peso = normalizeString(input.peso).toUpperCase()
   const pai = normalizeString(input.pai).toUpperCase()
   const mae = normalizeString(input.mae).toUpperCase()
   const avo_materno = normalizeString(input.avo_materno).toUpperCase()
@@ -155,6 +158,7 @@ function normalizeInput(input: AnimalImportInput, options: ImportAnimaisOptions 
     pelagem,
     nascimento,
     altura,
+    peso,
     pai,
     mae,
     avo_materno,
@@ -168,6 +172,7 @@ function normalizeInput(input: AnimalImportInput, options: ImportAnimaisOptions 
       pelagem,
       nascimento,
       altura ? `ALTURA: ${altura}` : '',
+      peso ? `PESO: ${peso}` : '',
       informacoes ? `INFO: ${informacoes}` : ''
     ]
       .filter(Boolean)
@@ -188,6 +193,8 @@ function isSameAnimal(a: AnimalImportInput, b: AnimalImportInput) {
     (a.sexo || '') === (b.sexo || '') &&
     (a.pelagem || '') === (b.pelagem || '') &&
     (a.nascimento || '') === (b.nascimento || '') &&
+    (a.altura || '') === (b.altura || '') &&
+    (a.peso || '') === (b.peso || '') &&
     (a.vendedor || '') === (b.vendedor || '') &&
     a.informacoes === b.informacoes &&
     a.genealogia === b.genealogia &&
@@ -236,7 +243,7 @@ export async function importAnimais(
 
       const [existing] = await prisma.$queryRawUnsafe<any[]>(
         `
-          SELECT id, lote, nome, categoria, raca, sexo, pelagem, nascimento, proprietario, informacoes, genealogia, condicoes_cobertura
+          SELECT id, lote, nome, categoria, raca, sexo, pelagem, nascimento, altura, peso, proprietario, informacoes, genealogia, condicoes_cobertura
           FROM Animal
           WHERE leilao_id = ? AND lote = ?
           LIMIT 1
@@ -258,13 +265,15 @@ export async function importAnimais(
               sexo,
               pelagem,
               nascimento,
+              altura,
+              peso,
               proprietario,
               informacoes,
               genealogia,
               condicoes_cobertura,
               criado_em,
               atualizado_em
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
           `,
           randomUUID(),
           leilaoId,
@@ -275,6 +284,8 @@ export async function importAnimais(
           input.sexo ?? '',
           input.pelagem ?? '',
           input.nascimento ?? '',
+          input.altura ?? '',
+          input.peso ?? '',
           input.vendedor ?? '',
           input.informacoes,
           input.genealogia,
@@ -295,6 +306,8 @@ export async function importAnimais(
           sexo: existing.sexo,
           pelagem: existing.pelagem,
           nascimento: existing.nascimento,
+          altura: existing.altura,
+          peso: existing.peso,
           vendedor: existing.proprietario,
           informacoes: existing.informacoes,
           genealogia: existing.genealogia,
@@ -318,6 +331,8 @@ export async function importAnimais(
             sexo = ?,
             pelagem = ?,
             nascimento = ?,
+            altura = ?,
+            peso = ?,
             proprietario = ?,
             informacoes = ?,
             genealogia = ?,
@@ -331,6 +346,8 @@ export async function importAnimais(
         input.sexo ?? '',
         input.pelagem ?? '',
         input.nascimento ?? '',
+        input.altura ?? '',
+        input.peso ?? '',
         input.vendedor ?? '',
         input.informacoes,
         input.genealogia,

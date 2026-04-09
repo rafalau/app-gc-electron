@@ -50,6 +50,7 @@ type AnimalPayload = {
   pelagem: string
   nascimento: string
   altura: string
+  peso: string
   informacoes: string
   genealogia: string
   condicoes_cobertura: string[]
@@ -510,10 +511,20 @@ export async function fetchRemotoJson<T>(url: string, init?: RequestInit): Promi
 }
 
 function parseInformacoesAgregadas(informacoes: string) {
+  const normalizarNascimentoTexto = (value?: string | null) => {
+    const texto = String(value ?? '').trim().toUpperCase()
+    const matchIso = texto.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+    if (!matchIso) return texto
+
+    const [, ano, mes, dia] = matchIso
+    return `${dia}/${mes}/${ano}`
+  }
+
   const partesBrutas = String(informacoes ?? '')
     .split('|')
     .map((parte) => parte.trim())
   let altura = ''
+  let peso = ''
   const partes = partesBrutas.filter(Boolean).filter((parte) => {
     const matchAltura = parte.match(/^ALTURA\s*:\s*(.+)$/i)
     if (matchAltura) {
@@ -521,45 +532,71 @@ function parseInformacoesAgregadas(informacoes: string) {
       return false
     }
 
+    const matchPeso = parte.match(/^PESO\s*:\s*(.+)$/i)
+    if (matchPeso) {
+      peso = matchPeso[1].trim()
+      return false
+    }
+
     return !/^(INFO|LOCAL|CIDADE(?:\/UF)?|UF)\s*:/i.test(parte)
   })
 
   if (partesBrutas.length >= 4 || (partesBrutas.length > 1 && partesBrutas.some((parte) => parte === ''))) {
-    const [raca = '', sexo = '', pelagem = '', nascimento = '', alturaPosicional = ''] = partesBrutas
+    const [raca = '', sexo = '', pelagem = '', nascimento = '', alturaPosicional = '', pesoPosicional = ''] = partesBrutas
     return {
       raca,
       sexo,
       pelagem,
-      nascimento,
-      altura: altura || alturaPosicional.trim()
+      nascimento: normalizarNascimentoTexto(nascimento),
+      altura: altura || alturaPosicional.trim(),
+      peso: peso || pesoPosicional.trim()
+    }
+  }
+
+  if (partes.length >= 6) {
+    const [raca, sexo, pelagem, nascimento, alturaPosicional, pesoPosicional] = partes
+    return {
+      raca,
+      sexo,
+      pelagem,
+      nascimento: normalizarNascimentoTexto(nascimento),
+      altura: altura || alturaPosicional,
+      peso: peso || pesoPosicional
     }
   }
 
   if (partes.length >= 5) {
     const [raca, sexo, pelagem, nascimento, alturaPosicional] = partes
-    return { raca, sexo, pelagem, nascimento, altura: altura || alturaPosicional }
+    return {
+      raca,
+      sexo,
+      pelagem,
+      nascimento: normalizarNascimentoTexto(nascimento),
+      altura: altura || alturaPosicional,
+      peso
+    }
   }
 
   if (partes.length === 4) {
     const [raca, sexo, pelagem, nascimento] = partes
-    return { raca, sexo, pelagem, nascimento, altura }
+    return { raca, sexo, pelagem, nascimento: normalizarNascimentoTexto(nascimento), altura, peso }
   }
 
   if (partes.length === 3) {
     const [sexo, pelagem, nascimento] = partes
-    return { raca: '', sexo, pelagem, nascimento, altura }
+    return { raca: '', sexo, pelagem, nascimento: normalizarNascimentoTexto(nascimento), altura, peso }
   }
 
   if (partes.length === 2) {
     const [sexo, pelagem] = partes
-    return { raca: '', sexo, pelagem, nascimento: '', altura }
+    return { raca: '', sexo, pelagem, nascimento: '', altura, peso }
   }
 
   if (partes.length === 1) {
-    return { raca: '', sexo: partes[0], pelagem: '', nascimento: '', altura }
+    return { raca: '', sexo: partes[0], pelagem: '', nascimento: '', altura, peso }
   }
 
-  return { raca: '', sexo: '', pelagem: '', nascimento: '', altura: '' }
+  return { raca: '', sexo: '', pelagem: '', nascimento: '', altura: '', peso: '' }
 }
 
 function formatarInformacoesParaExibicao(informacoes: string) {
@@ -568,6 +605,40 @@ function formatarInformacoesParaExibicao(informacoes: string) {
     .map((parte) => parte.trim())
     .filter(Boolean)
     .join('   |   ')
+}
+
+function formatarInformacoesBasicasParaExibicao(informacoes: string) {
+  const partes = String(informacoes ?? '')
+    .split('|')
+    .map((parte) => parte.trim())
+    .filter(Boolean)
+
+  const semRotulosAlturaPeso = partes.filter(
+    (parte) => !/^ALTURA\s*:/i.test(parte) && !/^PESO\s*:/i.test(parte)
+  )
+
+  if (semRotulosAlturaPeso.length !== partes.length) {
+    return semRotulosAlturaPeso.join('   |   ')
+  }
+
+  if (partes.length >= 6) {
+    return [...partes.slice(0, 4), ...partes.slice(6)].join('   |   ')
+  }
+
+  if (partes.length >= 5) {
+    return [...partes.slice(0, 4), ...partes.slice(5)].join('   |   ')
+  }
+
+  return partes.join('   |   ')
+}
+
+function formatarAlturaPesoParaExibicao(altura: string, peso: string) {
+  const partes = [
+    altura ? `ALT.: ${altura}` : '',
+    peso ? `PESO: ${peso}` : ''
+  ].filter(Boolean)
+
+  return partes.join('   |   ')
 }
 
 function formatarGenealogiaParaExibicao(genealogia: string) {
@@ -596,7 +667,8 @@ function serializarAnimal(animal: any): AnimalPayload | null {
     sexo: animal.sexo ?? '',
     pelagem: animal.pelagem ?? '',
     nascimento: animal.nascimento ?? '',
-    altura: parsedInformacoes.altura,
+    altura: animal.altura ?? parsedInformacoes.altura ?? '',
+    peso: animal.peso ?? parsedInformacoes.peso ?? '',
     condicoes_cobertura: condicoesCobertura,
     criado_em: animal.criado_em instanceof Date ? animal.criado_em.toISOString() : animal.criado_em,
     atualizado_em:
@@ -629,6 +701,8 @@ async function montarJsonOperacao(leilaoId: string) {
                 sexo,
                 pelagem,
                 nascimento,
+                altura,
+                peso,
                 informacoes,
                 genealogia,
                 condicoes_cobertura,
@@ -665,6 +739,8 @@ async function montarJsonOperacao(leilaoId: string) {
     String(animal?.condicoes_pagamento_especificas ?? '').trim() ||
     String(leilao?.condicoes_de_pagamento ?? '').trim()
   const parsed = parseInformacoesAgregadas(animal?.informacoes ?? '')
+  const altura = animal?.altura || parsed.altura || ''
+  const peso = animal?.peso || parsed.peso || ''
 
   return [
     {
@@ -672,11 +748,14 @@ async function montarJsonOperacao(leilaoId: string) {
       LOTE: animal?.lote ?? '',
       NOME: animal?.nome ?? '',
       INFORMACOES: formatarInformacoesParaExibicao(animal?.informacoes ?? ''),
+      INFORMACOES_BASICAS: formatarInformacoesBasicasParaExibicao(animal?.informacoes ?? ''),
+      ALTURA_PESO: formatarAlturaPesoParaExibicao(altura, peso),
       RACA: animal?.raca || parsed.raca || '',
       SEXO: animal?.sexo || parsed.sexo || '',
       PELAGEM: animal?.pelagem || parsed.pelagem || '',
       NASCIMENTO: animal?.nascimento || parsed.nascimento || '',
-      ALTURA: animal?.altura || parsed.altura || '',
+      ALTURA: altura,
+      PESO: peso,
       GENEALOGIA: formatarGenealogiaParaExibicao(animal?.genealogia ?? ''),
       VENDEDOR: animal?.vendedor ?? '',
       PACOTES_COBERTURAS:

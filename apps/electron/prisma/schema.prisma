@@ -35,6 +35,7 @@ model Animal {
   sexo          String   @default("")
   pelagem       String   @default("")
   nascimento    String   @default("")
+  altura        String   @default("")
   idade         String   @default("")
   peso          String   @default("")
   proprietario  String   @default("")

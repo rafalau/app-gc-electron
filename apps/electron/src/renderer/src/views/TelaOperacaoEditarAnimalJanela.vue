@@ -20,7 +20,7 @@ const carregando = ref(true)
 const salvando = ref(false)
 const erro = ref('')
 const titulo = ref('Editar Animal')
-const layoutModo = ref<LayoutInformacoesAnimais>('AGREGADAS')
+const layoutModo = ref<LayoutInformacoesAnimais>('SEPARADAS')
 const form = ref<AnimalCriarPayload>({
   leilao_id: leilaoId,
   lote: '',
@@ -33,6 +33,7 @@ const form = ref<AnimalCriarPayload>({
   pelagem: '',
   nascimento: '',
   altura: '',
+  peso: '',
   informacoes: '',
   genealogia: '',
   condicoes_cobertura: []
@@ -50,6 +51,7 @@ const formLocal = reactive<AnimalCriarPayload>({
   pelagem: '',
   nascimento: '',
   altura: '',
+  peso: '',
   informacoes: '',
   genealogia: '',
   condicoes_cobertura: []
@@ -84,24 +86,19 @@ function sincronizarForm() {
   formLocal.pelagem = form.value.pelagem
   formLocal.nascimento = form.value.nascimento
   formLocal.altura = form.value.altura
+  formLocal.peso = form.value.peso
   formLocal.informacoes = form.value.informacoes
   formLocal.genealogia = form.value.genealogia
   formLocal.condicoes_cobertura = [...form.value.condicoes_cobertura]
 
-  if (
-    layoutModo.value === 'SEPARADAS' &&
-    !formLocal.raca &&
-    !formLocal.sexo &&
-    !formLocal.pelagem &&
-    !formLocal.nascimento &&
-    !formLocal.altura
-  ) {
+  if (!formLocal.raca && !formLocal.sexo && !formLocal.pelagem && !formLocal.nascimento && !formLocal.altura && !formLocal.peso) {
     const parsed = parseInformacoesAgregadas(form.value.informacoes)
     formLocal.raca = parsed.raca
     formLocal.sexo = parsed.sexo
     formLocal.pelagem = parsed.pelagem
     formLocal.nascimento = parsed.nascimento
     formLocal.altura = parsed.altura
+    formLocal.peso = parsed.peso
   }
 
   novaCondicao.value = ''
@@ -130,10 +127,9 @@ async function carregar() {
   erro.value = ''
 
   try {
-    const [leilao, animais, layout] = await Promise.all([
+    const [leilao, animais] = await Promise.all([
       fetchJson<any>(`/sync/leiloes/${encodeURIComponent(leilaoId)}`),
-      fetchJson<any[]>(`/sync/animais/${encodeURIComponent(leilaoId)}`),
-      fetchJson<{ modo: LayoutInformacoesAnimais }>(`/sync/layout/${encodeURIComponent(leilaoId)}`)
+      fetchJson<any[]>(`/sync/animais/${encodeURIComponent(leilaoId)}`)
     ])
 
     const animal = animais.find((item) => item.id === animalId)
@@ -144,7 +140,7 @@ async function carregar() {
 
     titulo.value = leilao?.titulo_evento ? `Editar Animal - ${leilao.titulo_evento}` : 'Editar Animal'
     document.title = titulo.value
-    layoutModo.value = layout.modo
+    layoutModo.value = 'SEPARADAS'
     form.value = {
       leilao_id: animal.leilao_id,
       lote: animal.lote,
@@ -157,6 +153,7 @@ async function carregar() {
       pelagem: animal.pelagem,
       nascimento: animal.nascimento,
       altura: animal.altura,
+      peso: animal.peso,
       informacoes: animal.informacoes,
       genealogia: animal.genealogia,
       condicoes_cobertura: [...animal.condicoes_cobertura]
@@ -196,14 +193,13 @@ async function importarStudbook(registro: string) {
     formLocal.nome = payload.nome
     formLocal.informacoes = payload.informacoes
     formLocal.genealogia = payload.genealogia
-    if (layoutModo.value === 'SEPARADAS') {
-      const parsed = parseInformacoesAgregadas(payload.informacoes)
-      formLocal.raca = parsed.raca
-      formLocal.sexo = parsed.sexo
-      formLocal.pelagem = parsed.pelagem
-      formLocal.nascimento = parsed.nascimento
-      formLocal.altura = parsed.altura
-    }
+    const parsed = parseInformacoesAgregadas(payload.informacoes)
+    formLocal.raca = parsed.raca
+    formLocal.sexo = parsed.sexo
+    formLocal.pelagem = parsed.pelagem
+    formLocal.nascimento = parsed.nascimento
+    formLocal.altura = parsed.altura
+    formLocal.peso = parsed.peso
     studbookAberto.value = false
   } catch (errorAtual) {
     studbookErro.value = (errorAtual as Error).message
@@ -230,16 +226,14 @@ function fecharJanela() {
 async function salvar() {
   erro.value = ''
 
-  const informacoes =
-    layoutModo.value === 'SEPARADAS'
-      ? buildInformacoesAgregadas({
-          raca: formLocal.raca,
-          sexo: formLocal.sexo,
-          pelagem: formLocal.pelagem,
-          nascimento: formLocal.nascimento,
-          altura: formLocal.altura
-        })
-      : formLocal.informacoes
+  const informacoes = buildInformacoesAgregadas({
+    raca: formLocal.raca,
+    sexo: formLocal.sexo,
+    pelagem: formLocal.pelagem,
+    nascimento: formLocal.nascimento,
+    altura: formLocal.altura,
+    peso: formLocal.peso
+  })
 
   const payload: AnimalCriarPayload = {
     ...formLocal,
@@ -284,6 +278,7 @@ async function salvar() {
         pelagem: payload.pelagem,
         nascimento: payload.nascimento,
         altura: payload.altura,
+        peso: payload.peso,
         informacoes: payload.informacoes,
         genealogia: payload.genealogia,
         condicoes_cobertura: payload.condicoes_cobertura
@@ -436,23 +431,10 @@ onMounted(() => {
               />
             </div>
 
-            <div v-if="layoutModo === 'AGREGADAS'" class="col-span-12">
-              <label class="mb-2 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
-                Informações
-              </label>
-              <input
-                v-model="formLocal.informacoes"
-                class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800 shadow-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100"
-                type="text"
-                @input="applyUppercaseInput($event, (value) => (formLocal.informacoes = value))"
-              />
-            </div>
-
-            <template v-else>
-              <div class="col-span-12 grid grid-cols-1 gap-5 md:grid-cols-2">
-                <div>
-                  <label class="mb-2 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
-                    Raça
+            <div class="col-span-12 grid grid-cols-1 gap-5 md:grid-cols-3">
+              <div>
+                <label class="mb-2 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+                  Raça
                   </label>
                   <input
                     v-model="formLocal.raca"
@@ -462,21 +444,7 @@ onMounted(() => {
                   />
                 </div>
 
-                <div>
-                  <label class="mb-2 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
-                    Pelagem
-                  </label>
-                  <input
-                    v-model="formLocal.pelagem"
-                    class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800 shadow-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100"
-                    type="text"
-                    @input="applyUppercaseInput($event, (value) => (formLocal.pelagem = value))"
-                  />
-                </div>
-              </div>
-
-              <div class="col-span-12 grid grid-cols-1 gap-5 md:grid-cols-3">
-                <div>
+                <div class="md:order-3">
                   <label class="mb-2 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
                     Sexo
                   </label>
@@ -488,6 +456,20 @@ onMounted(() => {
                   />
                 </div>
 
+                <div class="md:order-2">
+                  <label class="mb-2 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+                    Pelagem
+                  </label>
+                  <input
+                    v-model="formLocal.pelagem"
+                    class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800 shadow-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100"
+                    type="text"
+                  @input="applyUppercaseInput($event, (value) => (formLocal.pelagem = value))"
+                />
+              </div>
+            </div>
+
+            <div class="col-span-12 grid grid-cols-1 gap-5 md:grid-cols-3">
                 <div>
                   <label class="mb-2 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
                     Nascimento
@@ -500,7 +482,19 @@ onMounted(() => {
                   />
                 </div>
 
-                <div>
+                <div class="md:order-3">
+                  <label class="mb-2 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+                    Peso
+                  </label>
+                  <input
+                    v-model="formLocal.peso"
+                    class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800 shadow-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100"
+                    type="text"
+                    @input="applyUppercaseInput($event, (value) => (formLocal.peso = value))"
+                  />
+                </div>
+
+                <div class="md:order-2">
                   <label class="mb-2 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
                     Altura
                   </label>
@@ -508,11 +502,10 @@ onMounted(() => {
                     v-model="formLocal.altura"
                     class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800 shadow-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100"
                     type="text"
-                    @input="applyUppercaseInput($event, (value) => (formLocal.altura = value))"
-                  />
-                </div>
+                  @input="applyUppercaseInput($event, (value) => (formLocal.altura = value))"
+                />
               </div>
-            </template>
+            </div>
 
             <div class="col-span-12">
               <label class="mb-2 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
