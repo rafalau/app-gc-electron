@@ -28,10 +28,16 @@ async function bootstrap() {
         ? createApp((await import('./views/TelaEdicaoRapidaAnimais.vue')).default)
         : windowMode === 'operation-auction-editor'
           ? createApp((await import('./views/TelaOperacaoEditarLeilaoJanela.vue')).default)
-          : windowMode === 'operation-animal-editor'
+        : windowMode === 'operation-animal-editor'
             ? createApp((await import('./views/TelaOperacaoEditarAnimalJanela.vue')).default)
             : windowMode === 'operation-vmix-editor'
               ? createApp((await import('./views/TelaOperacaoConfigurarVmixJanela.vue')).default)
+              : windowMode === 'remote-auction-editor'
+                ? createApp((await import('./views/TelaRemotoEditarLeilaoJanela.vue')).default)
+                : windowMode === 'remote-animal-editor'
+                  ? createApp((await import('./views/TelaOperacaoEditarAnimalJanela.vue')).default)
+                  : windowMode === 'remote-animal-settings'
+                    ? createApp((await import('./views/TelaRemotoConfiguracaoAnimaisJanela.vue')).default)
               : createApp((await import('./App.vue')).default)
 
     if (!windowMode) {

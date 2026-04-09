@@ -165,6 +165,11 @@ async function confirmarLimpar() {
 }
 
 function abrirConfiguracoes() {
+  if (modoAtual.value === 'REMOTO') {
+    void window.janela.abrirConfiguracaoAnimaisRemoto(leilaoId)
+    return
+  }
+
   layoutModoDraft.value = layoutInformacoesModo.value
   incluirRacaDraft.value = incluirRacaNasImportacoes.value
   void (async () => {
@@ -224,6 +229,15 @@ function abrirModoOperacao(animal?: Animal) {
 
 async function abrirModoConferencia(animal?: Animal) {
   await window.janela.abrirEdicaoRapida(leilaoId, animal?.id)
+}
+
+function abrirEdicaoAnimal(animal: Animal) {
+  if (modoAtual.value === 'REMOTO') {
+    void window.janela.abrirEditorAnimalRemoto(leilaoId, animal.id)
+    return
+  }
+
+  abrirEditar(animal)
 }
 
 onMounted(async () => {
@@ -322,7 +336,7 @@ onMounted(async () => {
       :animais="animaisFiltrados"
       :layout-modo="layoutInformacoesModo"
       :excluindo-animal-id="excluindoAnimalId"
-      @editar="abrirEditar"
+      @editar="abrirEdicaoAnimal"
       @excluir="excluir"
     />
 

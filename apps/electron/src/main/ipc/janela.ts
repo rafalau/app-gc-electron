@@ -6,6 +6,7 @@ import { getModoConexaoOperacao } from './operacao'
 type JanelaPreset = 'DESKTOP' | 'OPERACAO'
 const janelasConferencia = new Map<string, BrowserWindow>()
 const janelasOperacao = new Map<string, BrowserWindow>()
+const janelasRemotas = new Map<string, BrowserWindow>()
 
 function centralizarNaTela(win: BrowserWindow, parent?: BrowserWindow | null) {
   const bounds = win.getBounds()
@@ -47,6 +48,28 @@ async function carregarJanelaConferencia(win: BrowserWindow, leilaoId: string, a
 async function carregarJanelaOperacao(
   win: BrowserWindow,
   windowMode: 'operation-auction-editor' | 'operation-animal-editor' | 'operation-vmix-editor',
+  queryParams: Record<string, string>
+) {
+  const conexao = await getModoConexaoOperacao()
+  const query = new URLSearchParams({
+    window: windowMode,
+    baseUrl: conexao.baseUrl,
+    ...queryParams
+  })
+
+  if (is.dev && process.env['ELECTRON_RENDERER_URL']) {
+    await win.loadURL(`${process.env['ELECTRON_RENDERER_URL']}?${query.toString()}`)
+    return
+  }
+
+  await win.loadFile(join(__dirname, '../renderer/index.html'), {
+    query: Object.fromEntries(query.entries())
+  })
+}
+
+async function carregarJanelaRemota(
+  win: BrowserWindow,
+  windowMode: 'remote-auction-editor' | 'remote-animal-editor' | 'remote-animal-settings',
   queryParams: Record<string, string>
 ) {
   const conexao = await getModoConexaoOperacao()
@@ -236,5 +259,119 @@ export function registrarIpcJanela() {
 
     janelasOperacao.set(chave, win)
     await carregarJanelaOperacao(win, 'operation-vmix-editor', { leilaoId })
+  })
+
+  ipcMain.handle('janela:abrirEditorLeilaoRemoto', async (event, leilaoId: string) => {
+    const parent = BrowserWindow.fromWebContents(event.sender)
+    const chave = `leilao:${leilaoId}`
+    const existente = janelasRemotas.get(chave)
+
+    if (existente && !existente.isDestroyed()) {
+      await carregarJanelaRemota(existente, 'remote-auction-editor', { leilaoId })
+      existente.show()
+      existente.focus()
+      return
+    }
+
+    const win = new BrowserWindow({
+      width: 860,
+      height: 720,
+      minWidth: 700,
+      minHeight: 560,
+      show: false,
+      autoHideMenuBar: false,
+      webPreferences: {
+        preload: join(__dirname, '../../preload/index.js'),
+        sandbox: false
+      }
+    })
+
+    win.on('ready-to-show', () => {
+      centralizarNaTela(win, parent)
+      win.show()
+    })
+
+    win.on('closed', () => {
+      janelasRemotas.delete(chave)
+    })
+
+    janelasRemotas.set(chave, win)
+    await carregarJanelaRemota(win, 'remote-auction-editor', { leilaoId })
+  })
+
+  ipcMain.handle('janela:abrirEditorAnimalRemoto', async (event, leilaoId: string, animalId: string) => {
+    const parent = BrowserWindow.fromWebContents(event.sender)
+    const chave = `animal:${leilaoId}`
+    const existente = janelasRemotas.get(chave)
+
+    if (existente && !existente.isDestroyed()) {
+      await carregarJanelaRemota(existente, 'remote-animal-editor', { leilaoId, animalId })
+      existente.show()
+      existente.focus()
+      return
+    }
+
+    const win = new BrowserWindow({
+      width: 980,
+      height: 860,
+      minWidth: 780,
+      minHeight: 680,
+      show: false,
+      autoHideMenuBar: false,
+      webPreferences: {
+        preload: join(__dirname, '../../preload/index.js'),
+        sandbox: false
+      }
+    })
+
+    win.on('ready-to-show', () => {
+      centralizarNaTela(win, parent)
+      win.show()
+    })
+
+    win.on('closed', () => {
+      janelasRemotas.delete(chave)
+    })
+
+    janelasRemotas.set(chave, win)
+    await carregarJanelaRemota(win, 'remote-animal-editor', { leilaoId, animalId })
+  })
+
+  ipcMain.handle('janela:abrirConfiguracaoAnimaisRemoto', async (event, leilaoId: string) => {
+    const parent = BrowserWindow.fromWebContents(event.sender)
+    const chave = `config:${leilaoId}`
+    const existente = janelasRemotas.get(chave)
+
+    if (existente && !existente.isDestroyed()) {
+      await carregarJanelaRemota(existente, 'remote-animal-settings', { leilaoId })
+      existente.show()
+      existente.focus()
+      return
+    }
+
+    const win = new BrowserWindow({
+      width: 880,
+      height: 760,
+      minWidth: 720,
+      minHeight: 560,
+      show: false,
+      autoHideMenuBar: false,
+      webPreferences: {
+        preload: join(__dirname, '../../preload/index.js'),
+        sandbox: false
+      }
+    })
+
+    win.on('ready-to-show', () => {
+      centralizarNaTela(win, parent)
+      win.show()
+    })
+
+    win.on('closed', () => {
+      janelasRemotas.delete(chave)
+    })
+
+    janelasRemotas.set(chave, win)
+    await carregarJanelaRemota(win, 'remote-animal-settings', { leilaoId })
   })
 }

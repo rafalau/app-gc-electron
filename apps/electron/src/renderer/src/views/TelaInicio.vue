@@ -85,6 +85,15 @@ function abrirConfiguracaoGcApi() {
   gcApiModalAberto.value = true
 }
 
+function abrirEdicaoLeilao(leilao: Leilao) {
+  if (modoAtual.value === 'REMOTO') {
+    void window.janela.abrirEditorLeilaoRemoto(leilao.id)
+    return
+  }
+
+  abrirEditar(leilao)
+}
+
 function fecharConfiguracaoGcApi() {
   gcApiModalAberto.value = false
 }
@@ -357,7 +366,7 @@ onMounted(async () => {
       :leiloes="leiloesFiltrados"
       :mostrar-sincronizacao="modoAtual !== 'REMOTO'"
       :pode-sincronizar="gcApiSyncHabilitado"
-      @editar="abrirEditar"
+      @editar="abrirEdicaoLeilao"
       @excluir="excluir"
       @animais="irAnimais"
       @operacao="irOperacao"

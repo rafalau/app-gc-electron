@@ -278,7 +278,13 @@ if (process.contextIsolated) {
       abrirEditorAnimalOperacao: (leilaoId: string, animalId: string) =>
         ipcRenderer.invoke('janela:abrirEditorAnimalOperacao', leilaoId, animalId),
       abrirConfiguracaoVmixOperacao: (leilaoId: string) =>
-        ipcRenderer.invoke('janela:abrirConfiguracaoVmixOperacao', leilaoId)
+        ipcRenderer.invoke('janela:abrirConfiguracaoVmixOperacao', leilaoId),
+      abrirEditorLeilaoRemoto: (leilaoId: string) =>
+        ipcRenderer.invoke('janela:abrirEditorLeilaoRemoto', leilaoId),
+      abrirEditorAnimalRemoto: (leilaoId: string, animalId: string) =>
+        ipcRenderer.invoke('janela:abrirEditorAnimalRemoto', leilaoId, animalId),
+      abrirConfiguracaoAnimaisRemoto: (leilaoId: string) =>
+        ipcRenderer.invoke('janela:abrirConfiguracaoAnimaisRemoto', leilaoId)
     })
 
     contextBridge.exposeInMainWorld('srtPlayer', {

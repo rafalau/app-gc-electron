@@ -285,6 +285,9 @@ declare global {
       abrirEditorLeilaoOperacao: (leilaoId: string) => Promise<void>
       abrirEditorAnimalOperacao: (leilaoId: string, animalId: string) => Promise<void>
       abrirConfiguracaoVmixOperacao: (leilaoId: string) => Promise<void>
+      abrirEditorLeilaoRemoto: (leilaoId: string) => Promise<void>
+      abrirEditorAnimalRemoto: (leilaoId: string, animalId: string) => Promise<void>
+      abrirConfiguracaoAnimaisRemoto: (leilaoId: string) => Promise<void>
     }
     srtPlayer: {
       prepare: () => Promise<{ ok: boolean }>
