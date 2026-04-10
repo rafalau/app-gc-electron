@@ -77,6 +77,14 @@ function getAssociacaoAtual() {
   return ASSOCIACOES.find((item) => item.value === associacaoSelecionada.value) ?? ASSOCIACOES[0]
 }
 
+function resetarBuscaAssociacao() {
+  studbookTerm.value = ''
+  studbookResults.value = []
+  studbookErro.value = ''
+  studbookLoading.value = false
+  studbookImportandoRegistro.value = ''
+}
+
 async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(`${baseUrl}${path}`, init)
   if (!response.ok) {
@@ -114,9 +122,7 @@ function sincronizarForm() {
   }
 
   novaCondicao.value = ''
-  studbookTerm.value = ''
-  studbookResults.value = []
-  studbookErro.value = ''
+  resetarBuscaAssociacao()
   studbookAberto.value = false
   associacaoSelecionada.value = 'ABCPCC'
 }
@@ -126,6 +132,10 @@ watch(
   () => sincronizarForm(),
   { deep: true, immediate: true }
 )
+
+watch(associacaoSelecionada, () => {
+  resetarBuscaAssociacao()
+})
 
 function validarLote(lote: string) {
   const valor = lote.trim().toUpperCase()
@@ -214,6 +224,7 @@ async function importarStudbook(registro: string) {
     formLocal.altura = parsed.altura
     formLocal.peso = parsed.peso
     formLocal.raca = getAssociacaoAtual().raca
+    resetarBuscaAssociacao()
     studbookAberto.value = false
   } catch (errorAtual) {
     studbookErro.value = (errorAtual as Error).message
@@ -391,14 +402,14 @@ onMounted(() => {
                       <tr>
                         <th class="px-4 py-3">Nome</th>
                         <th class="px-4 py-3 text-center">Registro</th>
-                        <th class="px-4 py-3 text-right">Ação</th>
+                        <th class="px-4 py-3 text-center">Ação</th>
                       </tr>
                     </thead>
                     <tbody class="divide-y divide-slate-200 bg-white">
                       <tr v-for="result in studbookResults" :key="result.id">
                         <td class="px-4 py-3">{{ result.nome }}</td>
                         <td class="px-4 py-3 text-center">{{ result.registro }}</td>
-                        <td class="px-4 py-3 text-right">
+                        <td class="px-4 py-3 text-center">
                           <button
                             class="rounded-xl bg-emerald-600 px-3 py-2 text-sm font-semibold text-white transition-all duration-200 hover:-translate-y-0.5 hover:bg-emerald-700 disabled:cursor-wait disabled:opacity-70"
                             type="button"
