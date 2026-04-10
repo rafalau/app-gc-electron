@@ -21,6 +21,7 @@ if [[ "$MODE" == "HOST" ]]; then
   PRODUCT_NAME="APP GC Vmix Host"
   EXEC_NAME="run-app-gc-host.sh"
   DESKTOP_NAME="app-gc-vmix-host.desktop"
+  WM_CLASS="app-gc-vmix-host"
   COMMENT="Operacao principal do APP GC Vmix"
   ICON_SOURCE="$APP_ROOT/resources/icon-host.png"
 else
@@ -29,6 +30,7 @@ else
   PRODUCT_NAME="APP GC Vmix Remoto"
   EXEC_NAME="run-app-gc-remoto.sh"
   DESKTOP_NAME="app-gc-vmix-remoto.desktop"
+  WM_CLASS="app-gc-vmix-remoto"
   COMMENT="Cliente remoto do APP GC Vmix"
   ICON_SOURCE="$APP_ROOT/resources/icon-remoto.png"
 fi
@@ -45,15 +47,16 @@ cp -a "$APP_NODE_MODULES_SOURCE/." "$PACKAGE_DIR/app/node_modules/"
 cp -a "$ROOT_NODE_MODULES_SOURCE/." "$PACKAGE_DIR/app/node_modules/"
 cp -a "$ICON_SOURCE" "$PACKAGE_DIR/icon.png"
 
-cat > "$PACKAGE_DIR/$EXEC_NAME" <<'EOF'
+cat > "$PACKAGE_DIR/$EXEC_NAME" <<EOF
 #!/usr/bin/env bash
 set -euo pipefail
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-APP_DIR="$SCRIPT_DIR/app"
-RUNTIME_DIR="$SCRIPT_DIR/runtime"
+SCRIPT_DIR="\$(cd "\$(dirname "\${BASH_SOURCE[0]}")" && pwd)"
+APP_DIR="\$SCRIPT_DIR/app"
+RUNTIME_DIR="\$SCRIPT_DIR/runtime"
 export APP_GC_PORTABLE=1
-cd "$SCRIPT_DIR"
-exec "$RUNTIME_DIR/electron" "$APP_DIR"
+export CHROME_DESKTOP="$DESKTOP_NAME"
+cd "\$SCRIPT_DIR"
+exec "\$RUNTIME_DIR/electron" --class="$WM_CLASS" "\$APP_DIR"
 EOF
 
 cat > "$PACKAGE_DIR/$DESKTOP_NAME" <<EOF
@@ -66,7 +69,8 @@ Exec=__PACKAGE_DIR__/$EXEC_NAME
 Icon=__PACKAGE_DIR__/icon.png
 Terminal=false
 Categories=Utility;
-StartupWMClass=$PRODUCT_NAME
+StartupWMClass=$WM_CLASS
+X-GNOME-WMClass=$WM_CLASS
 EOF
 
 cat > "$PACKAGE_DIR/install-desktop-entry.sh" <<EOF

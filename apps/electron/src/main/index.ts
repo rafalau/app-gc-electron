@@ -24,20 +24,26 @@ function getRuntimeIdentity() {
   if (__APP_MODE__ === 'HOST') {
     return {
       appName: 'APP GC Vmix Host',
-      appUserModelId: 'com.appgc.vmix.host'
+      appUserModelId: 'com.appgc.vmix.host',
+      linuxWmClass: 'app-gc-vmix-host',
+      desktopEntry: 'app-gc-vmix-host.desktop'
     }
   }
 
   if (__APP_MODE__ === 'REMOTO') {
     return {
       appName: 'APP GC Vmix Remoto',
-      appUserModelId: 'com.appgc.vmix.remoto'
+      appUserModelId: 'com.appgc.vmix.remoto',
+      linuxWmClass: 'app-gc-vmix-remoto',
+      desktopEntry: 'app-gc-vmix-remoto.desktop'
     }
   }
 
   return {
     appName: app.getName(),
-    appUserModelId: 'com.electron'
+    appUserModelId: 'com.electron',
+    linuxWmClass: 'app-gc-vmix',
+    desktopEntry: 'app-gc-vmix-host.desktop'
   }
 }
 
@@ -55,6 +61,8 @@ if (process.platform === 'linux') {
   // Reduz ruído de logs internos do Chromium/Electron no terminal.
   app.commandLine.appendSwitch('disable-logging')
   app.commandLine.appendSwitch('log-level', '3')
+  app.commandLine.appendSwitch('class', runtimeIdentity.linuxWmClass)
+  process.env.CHROME_DESKTOP = runtimeIdentity.desktopEntry
 }
 
 function createWindow(): void {
