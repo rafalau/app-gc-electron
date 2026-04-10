@@ -7,7 +7,7 @@ import type {
   LayoutInformacoesAnimais,
   ModalAnimalModo
 } from '@renderer/composables/useAnimais'
-import type { StudbookSearchResult } from '@renderer/types/importacao'
+import type { AssociationProvider, StudbookSearchResult } from '@renderer/types/importacao'
 import { buscarStudbook, importarAnimalStudbook } from '@renderer/services/importacao.service'
 import { applyUppercaseInput } from '@renderer/utils/uppercaseInput'
 import { getFriendlyErrorMessage } from '@renderer/utils/errorMessage'
@@ -53,6 +53,18 @@ const studbookLoading = ref(false)
 const studbookImportandoRegistro = ref('')
 const studbookErro = ref('')
 const studbookAberto = ref(false)
+const associacaoSelecionada = ref<AssociationProvider>('ABCPCC')
+
+const ASSOCIACOES: Array<{ value: AssociationProvider; label: string; raca: string }> = [
+  { value: 'ABCPCC', label: 'ABCPCC', raca: 'PSI' },
+  { value: 'ABQM', label: 'ABQM', raca: 'QM' },
+  { value: 'ABCCRM', label: 'ABCCRM', raca: 'MANGALARGA' },
+  { value: 'ABCCH', label: 'ABCCH', raca: 'BH' }
+]
+
+function getAssociacaoAtual() {
+  return ASSOCIACOES.find((item) => item.value === associacaoSelecionada.value) ?? ASSOCIACOES[0]
+}
 
 function sincronizarForm() {
   formLocal.leilao_id = props.form.leilao_id
@@ -86,6 +98,7 @@ function sincronizarForm() {
   studbookResults.value = []
   studbookErro.value = ''
   studbookAberto.value = false
+  associacaoSelecionada.value = 'ABCPCC'
 }
 
 watch(
@@ -137,7 +150,7 @@ async function pesquisarStudbook() {
 
   studbookLoading.value = true
   try {
-    studbookResults.value = await buscarStudbook(studbookTerm.value)
+    studbookResults.value = await buscarStudbook(studbookTerm.value, associacaoSelecionada.value)
     if (studbookResults.value.length === 0) {
       studbookErro.value = 'A pesquisa não retornou resultados.'
     }
@@ -153,7 +166,7 @@ async function importarStudbook(registro: string) {
   studbookImportandoRegistro.value = registro
 
   try {
-    const payload = await importarAnimalStudbook(registro)
+    const payload = await importarAnimalStudbook(registro, associacaoSelecionada.value)
     formLocal.nome = payload.nome
     formLocal.informacoes = payload.informacoes
     formLocal.genealogia = payload.genealogia
@@ -164,6 +177,7 @@ async function importarStudbook(registro: string) {
     formLocal.nascimento = parsed.nascimento
     formLocal.altura = parsed.altura
     formLocal.peso = parsed.peso
+    formLocal.raca = getAssociacaoAtual().raca
     studbookAberto.value = false
   } catch (error) {
     studbookErro.value = getFriendlyErrorMessage(error)
@@ -189,9 +203,9 @@ async function importarStudbook(registro: string) {
     <div class="mb-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
       <div class="flex flex-wrap items-center justify-between gap-3">
         <div>
-          <div class="text-sm font-semibold text-slate-900">A.B.C.P.C.C.</div>
+          <div class="text-sm font-semibold text-slate-900">Associação</div>
           <div class="text-xs text-slate-500">
-            Buscar e preencher nome, informações e genealogia automaticamente.
+            Escolha a associação para buscar e preencher nome, raça, informações e genealogia.
           </div>
         </div>
         <BaseButton variante="primario" @click="studbookAberto = !studbookAberto">
@@ -201,6 +215,23 @@ async function importarStudbook(registro: string) {
 
       <Transition name="studbook-expand">
         <div v-if="studbookAberto" class="mt-4 space-y-4">
+          <div class="grid gap-2 md:grid-cols-[220px_minmax(0,1fr)] md:items-center">
+            <label class="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+              Associação
+            </label>
+            <div class="relative">
+              <select
+                v-model="associacaoSelecionada"
+                class="w-full appearance-none rounded-xl border border-slate-200 bg-white px-4 py-3 pr-10 text-sm text-slate-800 shadow-sm outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+              >
+                <option v-for="item in ASSOCIACOES" :key="item.value" :value="item.value">
+                  {{ item.label }}
+                </option>
+              </select>
+              <i class="fas fa-chevron-down pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-xs text-slate-400" />
+            </div>
+          </div>
+
           <div class="flex gap-3">
             <input
               v-model="studbookTerm"
@@ -234,18 +265,18 @@ async function importarStudbook(registro: string) {
                 </tr>
               </thead>
               <tbody class="divide-y divide-slate-200 bg-white">
-                <tr v-for="result in studbookResults" :key="result.registro">
+                <tr v-for="result in studbookResults" :key="result.id">
                   <td class="px-4 py-3">{{ result.nome }}</td>
                   <td class="px-4 py-3 text-center">{{ result.registro }}</td>
                   <td class="px-4 py-3 text-right">
                     <button
                       class="rounded-xl bg-emerald-600 px-3 py-2 text-sm font-semibold text-white transition-all duration-200 hover:-translate-y-0.5 hover:bg-emerald-700 disabled:cursor-wait disabled:opacity-70"
                       type="button"
-                      :disabled="studbookImportandoRegistro === result.registro"
-                      @click="importarStudbook(result.registro)"
+                      :disabled="studbookImportandoRegistro === result.id"
+                      @click="importarStudbook(result.id)"
                     >
                       {{
-                        studbookImportandoRegistro === result.registro ? 'Importando...' : 'Usar dados'
+                        studbookImportandoRegistro === result.id ? 'Importando...' : 'Usar dados'
                       }}
                     </button>
                   </td>

@@ -257,8 +257,10 @@ if (process.contextIsolated) {
     })
 
     contextBridge.exposeInMainWorld('studbook', {
-      buscar: (term: string) => ipcRenderer.invoke('studbook:buscar', term),
-      importar: (registro: string) => ipcRenderer.invoke('studbook:importar', registro)
+      buscar: (term: string, provider: 'ABCPCC' | 'ABQM' | 'ABCCRM' | 'ABCCH' = 'ABCPCC') =>
+        ipcRenderer.invoke('studbook:buscar', term, provider),
+      importar: (registro: string, provider: 'ABCPCC' | 'ABQM' | 'ABCCRM' | 'ABCCH' = 'ABCPCC') =>
+        ipcRenderer.invoke('studbook:importar', registro, provider)
     })
 
     contextBridge.exposeInMainWorld('operacao', {

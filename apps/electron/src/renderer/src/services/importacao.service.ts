@@ -1,4 +1,5 @@
 import type {
+  AssociationProvider,
   ApiAuctionOption,
   ApiImportProviderOption,
   ImportSummary,
@@ -39,10 +40,16 @@ export async function importarLeilaoApi(
   )
 }
 
-export async function buscarStudbook(term: string): Promise<StudbookSearchResult[]> {
-  return window.studbook.buscar(term)
+export async function buscarStudbook(
+  term: string,
+  provider: AssociationProvider = 'ABCPCC'
+): Promise<StudbookSearchResult[]> {
+  return window.studbook.buscar(term, provider)
 }
 
-export async function importarAnimalStudbook(registro: string): Promise<StudbookImportPayload> {
-  return window.studbook.importar(registro)
+export async function importarAnimalStudbook(
+  registro: string,
+  provider: AssociationProvider = 'ABCPCC'
+): Promise<StudbookImportPayload> {
+  return window.studbook.importar(registro, provider)
 }

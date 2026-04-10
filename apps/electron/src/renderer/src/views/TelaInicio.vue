@@ -16,7 +16,7 @@ import {
   salvarConfiguracaoGcApi,
   testarConfiguracaoGcApi
 } from '@renderer/services/config.service'
-import { sincronizarGcApi, sincronizarLeilaoGcApi } from '@renderer/services/gcSync.service'
+import { sincronizarGcApi } from '@renderer/services/gcSync.service'
 import { obterConexaoOperacao } from '@renderer/services/operacao.service'
 import { applyUppercaseInput } from '@renderer/utils/uppercaseInput'
 
@@ -206,33 +206,6 @@ async function sincronizarComGcApi() {
   }
 }
 
-async function sincronizarLeilao(leilao: Leilao) {
-  gcApiErro.value = ''
-  gcApiSucesso.value = ''
-
-  if (!gcApiConfig.value.baseUrl.trim() || !gcApiConfig.value.accessToken.trim()) {
-    gcApiErro.value = 'Configure a GC API antes de sincronizar.'
-    gcApiModalAberto.value = true
-    showToast(gcApiErro.value, 'warning', 5000)
-    return
-  }
-
-  gcApiSincronizando.value = true
-
-  try {
-    const resumo = await sincronizarLeilaoGcApi(leilao.id)
-    gcApiConfig.value = await obterConfiguracaoGcApi()
-    await carregar()
-    showToast(`${leilao.titulo_evento}: ${formatarResumoSync(resumo)}`, 'success', 6000)
-  } catch (error) {
-    gcApiErro.value = (error as Error).message
-    await carregar()
-    showToast(gcApiErro.value, 'error', 7000)
-  } finally {
-    gcApiSincronizando.value = false
-  }
-}
-
 async function copiarIpHost() {
   if (!ipHostPrincipal.value) return
   await navigator.clipboard.writeText(ipHostPrincipal.value)
@@ -364,13 +337,10 @@ onMounted(async () => {
     <!-- Tabela -->
     <LeilaoTabela
       :leiloes="leiloesFiltrados"
-      :mostrar-sincronizacao="modoAtual !== 'REMOTO'"
-      :pode-sincronizar="gcApiSyncHabilitado"
       @editar="abrirEdicaoLeilao"
       @excluir="excluir"
       @animais="irAnimais"
       @operacao="irOperacao"
-      @sincronizar="sincronizarLeilao"
     />
 
     <!-- Modal -->

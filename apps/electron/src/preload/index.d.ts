@@ -92,6 +92,7 @@ export type ApiAuctionOption = TbsAuctionOption
 export type Remate360EventOption = ApiAuctionOption
 
 export type StudbookSearchResult = {
+  id: string
   nome: string
   registro: string
 }
@@ -101,6 +102,8 @@ export type StudbookImportPayload = {
   informacoes: string
   genealogia: string
 }
+
+export type AssociationProvider = 'ABCPCC' | 'ABQM' | 'ABCCRM' | 'ABCCH'
 
 export type LayoutAnimaisConfig = {
   modo: 'AGREGADAS' | 'SEPARADAS'
@@ -269,8 +272,8 @@ declare global {
       ) => Promise<ImportSummary>
     }
     studbook: {
-      buscar: (term: string) => Promise<StudbookSearchResult[]>
-      importar: (registro: string) => Promise<StudbookImportPayload>
+      buscar: (term: string, provider?: AssociationProvider) => Promise<StudbookSearchResult[]>
+      importar: (registro: string, provider?: AssociationProvider) => Promise<StudbookImportPayload>
     }
     operacao: {
       obterArquivo: (leilaoId: string) => Promise<OperacaoArquivoInfo>

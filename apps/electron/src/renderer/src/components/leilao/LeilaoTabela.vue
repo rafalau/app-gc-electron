@@ -6,8 +6,6 @@ import { applyUppercaseInput } from '@renderer/utils/uppercaseInput'
 
 const props = defineProps<{
   leiloes: Leilao[]
-  mostrarSincronizacao?: boolean
-  podeSincronizar?: boolean
 }>()
 
 const emit = defineEmits<{
@@ -15,7 +13,6 @@ const emit = defineEmits<{
   (e: 'excluir', leilao: Leilao): void
   (e: 'animais', leilao: Leilao): void
   (e: 'operacao', leilao: Leilao): void
-  (e: 'sincronizar', leilao: Leilao): void
 }>()
 
 const showConfirmDelete = ref<string | null>(null)
@@ -79,14 +76,6 @@ function classeStatusSync(leilao: Leilao) {
 
 function getDropdownItems(leilao: Leilao) {
   const items = [
-    ...(props.mostrarSincronizacao
-      ? [{
-          label: 'Sinc. Servidor',
-          icon: 'fa-rotate-right',
-          disabled: !props.podeSincronizar,
-          action: () => emit('sincronizar', leilao)
-        }]
-      : []),
     {
       label: 'Gerenciar Animais',
       icon: 'fa-horse-head',

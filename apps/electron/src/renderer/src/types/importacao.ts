@@ -25,7 +25,10 @@ export type ApiImportProviderConfig = {
 
 export type ApiImportProviderOption = ApiImportProviderConfig
 
+export type AssociationProvider = 'ABCPCC' | 'ABQM' | 'ABCCRM' | 'ABCCH'
+
 export type StudbookSearchResult = {
+  id: string
   nome: string
   registro: string
 }
