@@ -18,6 +18,7 @@ import {
   removerAnimalLocal,
   removerAnimaisPorLeilaoLocal
 } from './animais'
+import { studbookService } from '../services/studbook.service'
 import { tbsService } from '../services/tbs.service'
 import { isRemate360Url, remate360Service } from '../services/remate360.service'
 import type { ApiImportProvider } from './apiImport'
@@ -835,6 +836,8 @@ export async function ensureOperacaoServer() {
     const matchRemateImportar = url.match(/^\/sync\/remate360\/importar$/)
     const matchApiLeiloes = url.match(/^\/sync\/importacao\/api\/leiloes$/)
     const matchApiImportar = url.match(/^\/sync\/importacao\/api\/importar$/)
+    const matchStudbookBuscar = url.match(/^\/sync\/studbook\/buscar(?:\?.*)?$/)
+    const matchStudbookImportar = url.match(/^\/sync\/studbook\/importar(?:\?.*)?$/)
 
     if (req.method === 'OPTIONS') {
       res.writeHead(204, {
@@ -1187,6 +1190,32 @@ export async function ensureOperacaoServer() {
         publicarSyncEvento('leiloes')
         publicarSyncEvento(`animais:${payload.leilaoId}`)
         responderJson(res, 200, resumo)
+        return
+      }
+
+      if (matchStudbookBuscar && req.method === 'GET') {
+        const requestUrl = new URL(url, 'http://127.0.0.1')
+        const term = String(requestUrl.searchParams.get('term') ?? '')
+        const provider = (requestUrl.searchParams.get('provider') ?? 'ABCPCC') as
+          | 'ABCPCC'
+          | 'ABQM'
+          | 'ABCCRM'
+          | 'ABCCH'
+
+        responderJson(res, 200, await studbookService.search(term, provider))
+        return
+      }
+
+      if (matchStudbookImportar && req.method === 'GET') {
+        const requestUrl = new URL(url, 'http://127.0.0.1')
+        const registro = String(requestUrl.searchParams.get('registro') ?? '')
+        const provider = (requestUrl.searchParams.get('provider') ?? 'ABCPCC') as
+          | 'ABCPCC'
+          | 'ABQM'
+          | 'ABCCRM'
+          | 'ABCCH'
+
+        responderJson(res, 200, await studbookService.importByRegistro(registro, provider))
         return
       }
 

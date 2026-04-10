@@ -229,11 +229,6 @@ async function abrirModoConferencia(animal?: Animal) {
 }
 
 function abrirEdicaoAnimal(animal: Animal) {
-  if (modoAtual.value === 'REMOTO') {
-    void window.janela.abrirEditorAnimalRemoto(leilaoId, animal.id)
-    return
-  }
-
   abrirEditar(animal)
 }
 

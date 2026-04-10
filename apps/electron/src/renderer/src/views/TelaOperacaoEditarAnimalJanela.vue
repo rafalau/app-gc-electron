@@ -4,7 +4,6 @@ import BaseButton from '@renderer/components/ui/BaseButton.vue'
 import { CATEGORIAS_ANIMAL, type AnimalCriarPayload } from '@renderer/types/animal'
 import type { LayoutInformacoesAnimais } from '@renderer/composables/useAnimais'
 import type { AssociationProvider, StudbookSearchResult } from '@renderer/types/importacao'
-import { buscarStudbook, importarAnimalStudbook } from '@renderer/services/importacao.service'
 import { applyUppercaseInput } from '@renderer/utils/uppercaseInput'
 import {
   buildInformacoesAgregadas,
@@ -92,6 +91,22 @@ async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
     throw new Error(body || `Falha HTTP ${response.status}`)
   }
   return response.json() as Promise<T>
+}
+
+async function buscarStudbookOperacao(
+  term: string,
+  provider: AssociationProvider
+): Promise<StudbookSearchResult[]> {
+  const query = new URLSearchParams({ term, provider })
+  return fetchJson<StudbookSearchResult[]>(`/sync/studbook/buscar?${query.toString()}`)
+}
+
+async function importarStudbookOperacao(
+  registro: string,
+  provider: AssociationProvider
+): Promise<{ nome: string; informacoes: string; genealogia: string }> {
+  const query = new URLSearchParams({ registro, provider })
+  return fetchJson(`/sync/studbook/importar?${query.toString()}`)
 }
 
 function sincronizarForm() {
@@ -196,7 +211,7 @@ async function pesquisarStudbook() {
 
   studbookLoading.value = true
   try {
-    studbookResults.value = await buscarStudbook(studbookTerm.value, associacaoSelecionada.value)
+    studbookResults.value = await buscarStudbookOperacao(studbookTerm.value, associacaoSelecionada.value)
     if (studbookResults.value.length === 0) {
       studbookErro.value = 'A pesquisa não retornou resultados.'
     }
@@ -212,7 +227,7 @@ async function importarStudbook(registro: string) {
   studbookImportandoRegistro.value = registro
 
   try {
-    const payload = await importarAnimalStudbook(registro, associacaoSelecionada.value)
+    const payload = await importarStudbookOperacao(registro, associacaoSelecionada.value)
     formLocal.nome = payload.nome
     formLocal.informacoes = payload.informacoes
     formLocal.genealogia = payload.genealogia
