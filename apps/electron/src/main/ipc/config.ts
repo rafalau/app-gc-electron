@@ -56,6 +56,8 @@ const VMIX_DEFAULT_PORT = 8088
 const SRT_DEFAULT_PORT = 9001
 const GC_API_DEFAULT_DEVICE_NAME = hostname().trim() || 'gc-desktop'
 
+type SrtConfigIpc = VmixConfigIpc['srt']
+
 function getAppModeOverride(): 'HOST' | 'REMOTO' | null {
   if (__APP_MODE__ === 'HOST' || __APP_MODE__ === 'REMOTO') {
     return __APP_MODE__
@@ -64,9 +66,17 @@ function getAppModeOverride(): 'HOST' | 'REMOTO' | null {
   return null
 }
 
+function normalizarConfigSrt(srt?: Partial<SrtConfigIpc> | null): SrtConfigIpc {
+  const portaSrt = Number(srt?.porta)
+
+  return {
+    ativo: Boolean(srt?.ativo),
+    porta: Number.isInteger(portaSrt) && portaSrt > 0 ? portaSrt : SRT_DEFAULT_PORT
+  }
+}
+
 function normalizarConfigVmix(vmix?: Partial<VmixConfigIpc> | null): VmixConfigIpc {
   const porta = Number(vmix?.porta)
-  const portaSrt = Number(vmix?.srt?.porta)
 
   return {
     ativo: Boolean(vmix?.ativo),
@@ -80,10 +90,7 @@ function normalizarConfigVmix(vmix?: Partial<VmixConfigIpc> | null): VmixConfigI
           type: String(vmix.inputSelecionado.type ?? '').trim()
         }
       : null,
-    srt: {
-      ativo: Boolean(vmix?.srt?.ativo),
-      porta: Number.isInteger(portaSrt) && portaSrt > 0 ? portaSrt : SRT_DEFAULT_PORT
-    }
+    srt: normalizarConfigSrt(vmix?.srt)
   }
 }
 
@@ -663,6 +670,10 @@ export function registrarIpcConfig() {
       porta: aplicado.modoConfig.portaApp
     })
     store.set('vmix', aplicado.vmix)
+
+    if (aplicado.modoConfig.modo === 'REMOTO') {
+      store.set('srtRemoto', normalizarConfigSrt(store.get('srtRemoto')))
+    }
   })
 
   ipcMain.handle('config:getModo', async () => {
@@ -687,11 +698,19 @@ export function registrarIpcConfig() {
 
   ipcMain.handle('config:getVmix', async () => {
     const conexaoOperacao = await getModoConexaoOperacao()
+    const store = await getStore()
+
     if (conexaoOperacao.modo === 'REMOTO') {
-      return fetchRemotoJson(`${conexaoOperacao.baseUrl}/sync/config/vmix`)
+      const vmixLocal = normalizarConfigVmix(store.get('vmix'))
+      const srtRemoto = normalizarConfigSrt(store.get('srtRemoto'))
+
+      return {
+        ...vmixLocal,
+        ip: vmixLocal.ip || conexaoOperacao.hostIp,
+        srt: srtRemoto
+      }
     }
 
-    const store = await getStore()
     const modoFixo = getAppModeOverride()
     const modo = store.get('modo')
     const conexao = store.get('conexaoApp')
@@ -710,13 +729,23 @@ export function registrarIpcConfig() {
   ipcMain.handle('config:setVmix', async (_evt, vmix: Partial<VmixConfigIpc>) => {
     const conexaoOperacao = await getModoConexaoOperacao()
     if (conexaoOperacao.modo === 'REMOTO') {
-      await fetchRemotoJson(`${conexaoOperacao.baseUrl}/sync/config/vmix`, {
-        method: 'PUT',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(normalizarConfigVmix(vmix))
+      const store = await getStore()
+      const vmixLocalAtual = normalizarConfigVmix(store.get('vmix'))
+      store.set('vmix', {
+        ...vmixLocalAtual,
+        ip: String(vmix.ip ?? '').trim() || conexaoOperacao.hostIp,
+        porta: normalizarConfigVmix(vmix).porta,
+        ativo: Boolean(vmix.ativo),
+        inputSelecionado: vmix.inputSelecionado
+          ? {
+              key: String(vmix.inputSelecionado.key ?? '').trim(),
+              number: String(vmix.inputSelecionado.number ?? '').trim(),
+              title: String(vmix.inputSelecionado.title ?? '').trim(),
+              type: String(vmix.inputSelecionado.type ?? '').trim()
+            }
+          : null
       })
+      store.set('srtRemoto', normalizarConfigSrt(vmix.srt))
       return
     }
 

@@ -28,6 +28,10 @@ type StoreSchema = {
       porta: number | null
     }
   }
+  srtRemoto: {
+    ativo: boolean
+    porta: number | null
+  }
   layoutAnimaisPorLeilao: Record<
     string,
     { modo: 'AGREGADAS' | 'SEPARADAS'; incluirRacaNasImportacoes: boolean }
@@ -104,6 +108,10 @@ export async function getStore() {
           ativo: false,
           porta: SRT_DEFAULT_PORT
         }
+      },
+      srtRemoto: {
+        ativo: false,
+        porta: SRT_DEFAULT_PORT
       },
       layoutAnimaisPorLeilao: {},
       operacaoPorLeilao: {},

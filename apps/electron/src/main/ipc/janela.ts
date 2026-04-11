@@ -102,6 +102,10 @@ function aplicarPreset(win: BrowserWindow, preset: JanelaPreset) {
   centralizarNaTela(win)
 }
 
+function getPreloadPath() {
+  return join(__dirname, '../preload/index.js')
+}
+
 export function registrarIpcJanela() {
   ipcMain.handle('janela:definirPreset', (event, preset: JanelaPreset) => {
     const win = BrowserWindow.fromWebContents(event.sender)
@@ -129,7 +133,7 @@ export function registrarIpcJanela() {
       show: false,
       autoHideMenuBar: false,
       webPreferences: {
-        preload: join(__dirname, '../../preload/index.js'),
+        preload: getPreloadPath(),
         sandbox: false
       }
     })
@@ -167,7 +171,7 @@ export function registrarIpcJanela() {
       show: false,
       autoHideMenuBar: false,
       webPreferences: {
-        preload: join(__dirname, '../../preload/index.js'),
+        preload: getPreloadPath(),
         sandbox: false
       }
     })
@@ -205,7 +209,7 @@ export function registrarIpcJanela() {
       show: false,
       autoHideMenuBar: false,
       webPreferences: {
-        preload: join(__dirname, '../../preload/index.js'),
+        preload: getPreloadPath(),
         sandbox: false
       }
     })
@@ -243,7 +247,7 @@ export function registrarIpcJanela() {
       show: false,
       autoHideMenuBar: false,
       webPreferences: {
-        preload: join(__dirname, '../../preload/index.js'),
+        preload: getPreloadPath(),
         sandbox: false
       }
     })
@@ -281,7 +285,7 @@ export function registrarIpcJanela() {
       show: false,
       autoHideMenuBar: false,
       webPreferences: {
-        preload: join(__dirname, '../../preload/index.js'),
+        preload: getPreloadPath(),
         sandbox: false
       }
     })
@@ -319,7 +323,7 @@ export function registrarIpcJanela() {
       show: false,
       autoHideMenuBar: false,
       webPreferences: {
-        preload: join(__dirname, '../../preload/index.js'),
+        preload: getPreloadPath(),
         sandbox: false
       }
     })
@@ -357,7 +361,7 @@ export function registrarIpcJanela() {
       show: false,
       autoHideMenuBar: false,
       webPreferences: {
-        preload: join(__dirname, '../../preload/index.js'),
+        preload: getPreloadPath(),
         sandbox: false
       }
     })

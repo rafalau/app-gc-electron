@@ -3,13 +3,14 @@ import { onMounted, ref } from 'vue'
 import BaseButton from '@renderer/components/ui/BaseButton.vue'
 import BaseSwitch from '@renderer/components/ui/BaseSwitch.vue'
 import { applyUppercaseInput } from '@renderer/utils/uppercaseInput'
-import type { VmixConfig, VmixInput } from '@renderer/types/config'
+import type { ModoConfig, VmixConfig, VmixInput } from '@renderer/types/config'
 
 const HOST_DEFAULT_IP = '127.0.0.1'
 const VMIX_DEFAULT_PORT = 8088
 const SRT_DEFAULT_PORT = 9001
-const searchParams = new URLSearchParams(window.location.search)
-const baseUrl = searchParams.get('baseUrl') ?? ''
+const windowComConfig = window as unknown as {
+  config?: Partial<Window['config']>
+}
 
 const carregando = ref(true)
 const salvando = ref(false)
@@ -17,6 +18,7 @@ const carregandoInputs = ref(false)
 const erro = ref('')
 const erroInputs = ref('')
 const modoOperacao = ref<'HOST' | 'REMOTO' | null>(null)
+const modoConfig = ref<ModoConfig | null>(null)
 const inputs = ref<VmixInput[]>([])
 const form = ref<VmixConfig>({
   ativo: false,
@@ -29,13 +31,75 @@ const form = ref<VmixConfig>({
   }
 })
 
-async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
-  const response = await fetch(`${baseUrl}${path}`, init)
-  if (!response.ok) {
-    const body = await response.text()
-    throw new Error(body || `Falha HTTP ${response.status}`)
+function getConfigApi(): Window['config'] {
+  const config = windowComConfig.config
+  if (!config?.getVmix || !config?.setVmix || !config.getModoConfig || !config.listarInputsVmix) {
+    throw new Error('API local de configuração indisponível nesta janela.')
   }
-  return response.json() as Promise<T>
+
+  return config as Window['config']
+}
+
+async function obterConfigJanela(): Promise<{ config: VmixConfig; conexao: ModoConfig }> {
+  const configApi = getConfigApi()
+  const [config, conexao] = await Promise.all([
+    configApi.getVmix(),
+    configApi.getModoConfig()
+  ])
+  return { config, conexao }
+}
+
+async function listarInputsJanela() {
+  const configApi = getConfigApi()
+  return configApi.listarInputsVmix(normalizarConfigFormulario(form.value))
+}
+
+async function salvarConfigJanela() {
+  const configApi = getConfigApi()
+  await configApi.setVmix(normalizarConfigFormulario(form.value))
+}
+
+function getIpPadraoVmix(conexao?: ModoConfig | null) {
+  if (conexao?.modo === 'REMOTO') return conexao.hostIp.trim()
+  return HOST_DEFAULT_IP
+}
+
+function aplicarDefaultsFormulario(config: VmixConfig, conexao: ModoConfig): VmixConfig {
+  const ipPadraoVmix = getIpPadraoVmix(conexao)
+  const ipVmix = String(config.ip ?? '').trim() || ipPadraoVmix
+
+  return {
+    ...config,
+    ip: ipVmix,
+    porta: Number(config.porta) > 0 ? config.porta : VMIX_DEFAULT_PORT,
+    srt: {
+      ...config.srt,
+      porta: Number(config.srt?.porta) > 0 ? config.srt.porta : SRT_DEFAULT_PORT
+    }
+  }
+}
+
+function normalizarConfigFormulario(config: VmixConfig): VmixConfig {
+  const porta = Number(config.porta)
+  const portaSrt = Number(config.srt?.porta)
+
+  return {
+    ativo: Boolean(config.ativo),
+    ip: String(config.ip ?? '').trim(),
+    porta: Number.isInteger(porta) && porta > 0 ? porta : VMIX_DEFAULT_PORT,
+    inputSelecionado: config.inputSelecionado
+      ? {
+          key: String(config.inputSelecionado.key ?? '').trim(),
+          number: String(config.inputSelecionado.number ?? '').trim(),
+          title: String(config.inputSelecionado.title ?? '').trim(),
+          type: String(config.inputSelecionado.type ?? '').trim()
+        }
+      : null,
+    srt: {
+      ativo: Boolean(config.srt?.ativo),
+      porta: Number.isInteger(portaSrt) && portaSrt > 0 ? portaSrt : SRT_DEFAULT_PORT
+    }
+  }
 }
 
 async function carregar() {
@@ -44,11 +108,9 @@ async function carregar() {
   erroInputs.value = ''
 
   try {
-    const [config, conexao] = await Promise.all([
-      fetchJson<VmixConfig>('/sync/config/vmix'),
-      fetchJson<{ modo: 'HOST' | 'REMOTO' | null }>('/sync/conexao')
-    ])
-    form.value = config
+    const { config, conexao } = await obterConfigJanela()
+    modoConfig.value = conexao
+    form.value = aplicarDefaultsFormulario(config, conexao)
     modoOperacao.value = conexao.modo
     document.title = 'Configuração do vMix'
 
@@ -67,11 +129,7 @@ async function carregarListaInputs() {
   carregandoInputs.value = true
 
   try {
-    inputs.value = await fetchJson<VmixInput[]>('/sync/config/vmix/inputs', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(form.value)
-    })
+    inputs.value = await listarInputsJanela()
   } catch (errorAtual) {
     erroInputs.value = (errorAtual as Error).message
     inputs.value = []
@@ -104,6 +162,14 @@ function selecionarInputVmix(event: Event) {
 
 async function salvar() {
   erro.value = ''
+  form.value = aplicarDefaultsFormulario(
+    form.value,
+    modoConfig.value ?? {
+      modo: modoOperacao.value,
+      hostIp: '',
+      portaApp: 18452
+    }
+  )
 
   if (form.value.ativo) {
     if (!form.value.ip.trim()) {
@@ -125,11 +191,7 @@ async function salvar() {
 
   salvando.value = true
   try {
-    await fetchJson('/sync/config/vmix', {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(form.value)
-    })
+    await salvarConfigJanela()
     window.close()
   } catch (errorAtual) {
     erro.value = (errorAtual as Error).message
@@ -272,7 +334,7 @@ onMounted(() => {
           <div class="col-span-12">
             <div class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
               Padrões do host: IP <strong>127.0.0.1</strong>, vMix <strong>8088</strong> e SRT
-              <strong>9001</strong>
+              <strong>9001</strong>. O SRT usa o mesmo IP informado no campo do vMix.
             </div>
           </div>
         </div>

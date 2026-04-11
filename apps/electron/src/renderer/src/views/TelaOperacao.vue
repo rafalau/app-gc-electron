@@ -79,6 +79,7 @@ const intervaloCompostoSegundos = ref(INTERVALO_COMPOSTO_PADRAO)
 let srtResizeObserver: ResizeObserver | null = null
 let srtScrollSyncHandler: (() => void) | null = null
 let srtResizeWindowHandler: (() => void) | null = null
+let recarregarConfigFocusHandler: (() => void) | null = null
 let operacaoEventSource: EventSource | null = null
 let configVmixEventSource: EventSource | null = null
 let aplicandoEstadoExterno = false
@@ -180,10 +181,6 @@ const vmixConfigurado = computed(() => {
   )
 })
 const srtIp = computed(() => {
-  if (conexaoOperacao.value?.modo === 'REMOTO') {
-    return conexaoOperacao.value.hostIp.trim()
-  }
-
   return formVmix.value.ip.trim()
 })
 const srtConfigurado = computed(() => {
@@ -348,6 +345,8 @@ async function iniciarRealtimeConfigVmix() {
   }
 
   const conexao = conexaoOperacao.value ?? (await obterConexaoOperacao())
+  if (conexao.modo === 'REMOTO') return
+
   const source = new EventSource(
     `${conexao.baseUrl}/sync/events/${encodeURIComponent('config:vmix')}`
   )
@@ -373,6 +372,16 @@ async function iniciarRealtimeConfigVmix() {
 
 async function abrirModalConfiguracao() {
   await window.janela.abrirConfiguracaoVmixOperacao(leilaoId)
+}
+
+async function recarregarConfiguracaoVmixLocal() {
+  try {
+    formVmix.value = await obterConfiguracaoVmix()
+    await nextTick()
+    await sincronizarPlaybackSrtPlayerComReconexao()
+  } catch (error) {
+    erroOperacao.value = getFriendlyErrorMessage(error)
+  }
 }
 
 async function toggleMuteSrtPlayer() {
@@ -1044,6 +1053,11 @@ onBeforeUnmount(() => {
 
 onMounted(() => {
   document.addEventListener('click', handleClickOutside)
+
+  recarregarConfigFocusHandler = () => {
+    void recarregarConfiguracaoVmixLocal()
+  }
+  window.addEventListener('focus', recarregarConfigFocusHandler)
 })
 
 onMounted(() => {
@@ -1081,6 +1095,10 @@ onUnmounted(() => {
   if (srtResizeWindowHandler) {
     window.removeEventListener('resize', srtResizeWindowHandler)
     srtResizeWindowHandler = null
+  }
+  if (recarregarConfigFocusHandler) {
+    window.removeEventListener('focus', recarregarConfigFocusHandler)
+    recarregarConfigFocusHandler = null
   }
   if (srtBoundsSyncTimer !== null) {
     window.clearTimeout(srtBoundsSyncTimer)
