@@ -179,17 +179,24 @@ const vmixConfigurado = computed(() => {
       formVmix.value.inputSelecionado?.key
   )
 })
+const srtIp = computed(() => {
+  if (conexaoOperacao.value?.modo === 'REMOTO') {
+    return conexaoOperacao.value.hostIp.trim()
+  }
+
+  return formVmix.value.ip.trim()
+})
 const srtConfigurado = computed(() => {
   return Boolean(
     formVmix.value.srt.ativo &&
-      formVmix.value.ip.trim() &&
+      srtIp.value &&
       Number.isInteger(Number(formVmix.value.srt.porta)) &&
       Number(formVmix.value.srt.porta) > 0
   )
 })
 const endpointSrt = computed(() => {
   if (!srtConfigurado.value) return ''
-  return `srt://${formVmix.value.ip}:${formVmix.value.srt.porta}?timeout=5000000`
+  return `srt://${srtIp.value}:${formVmix.value.srt.porta}?timeout=5000000`
 })
 function voltar() {
   router.push(`/leilao/${leilaoId}`)

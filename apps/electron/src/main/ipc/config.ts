@@ -686,6 +686,11 @@ export function registrarIpcConfig() {
   })
 
   ipcMain.handle('config:getVmix', async () => {
+    const conexaoOperacao = await getModoConexaoOperacao()
+    if (conexaoOperacao.modo === 'REMOTO') {
+      return fetchRemotoJson(`${conexaoOperacao.baseUrl}/sync/config/vmix`)
+    }
+
     const store = await getStore()
     const modoFixo = getAppModeOverride()
     const modo = store.get('modo')
@@ -703,6 +708,18 @@ export function registrarIpcConfig() {
   })
 
   ipcMain.handle('config:setVmix', async (_evt, vmix: Partial<VmixConfigIpc>) => {
+    const conexaoOperacao = await getModoConexaoOperacao()
+    if (conexaoOperacao.modo === 'REMOTO') {
+      await fetchRemotoJson(`${conexaoOperacao.baseUrl}/sync/config/vmix`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify(normalizarConfigVmix(vmix))
+      })
+      return
+    }
+
     const store = await getStore()
     const modoFixo = getAppModeOverride()
     const modo = store.get('modo')
