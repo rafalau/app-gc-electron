@@ -1,4 +1,4 @@
-import { app, shell, BrowserWindow, ipcMain, dialog } from 'electron'
+import { app, shell, BrowserWindow, ipcMain, dialog, Menu, type MenuItemConstructorOptions } from 'electron'
 import { join } from 'path'
 import { electronApp, optimizer, is } from '@electron-toolkit/utils'
 import defaultIcon from '../../resources/icon.png?asset'
@@ -65,8 +65,56 @@ if (process.platform === 'linux') {
   process.env.CHROME_DESKTOP = runtimeIdentity.desktopEntry
 }
 
+function configurarMenuApp() {
+  const template: MenuItemConstructorOptions[] = [
+    {
+      label: 'Arquivo',
+      submenu: [
+        { label: 'Fechar janela', role: 'close' },
+        { type: 'separator' },
+        { label: 'Sair', role: 'quit' }
+      ]
+    },
+    {
+      label: 'Editar',
+      submenu: [
+        { label: 'Desfazer', role: 'undo' },
+        { label: 'Refazer', role: 'redo' },
+        { type: 'separator' },
+        { label: 'Recortar', role: 'cut' },
+        { label: 'Copiar', role: 'copy' },
+        { label: 'Colar', role: 'paste' },
+        { label: 'Selecionar tudo', role: 'selectAll' }
+      ]
+    },
+    {
+      label: 'Visualizar',
+      submenu: [
+        { label: 'Recarregar', role: 'reload' },
+        { label: 'Forçar recarregamento', role: 'forceReload' },
+        { type: 'separator' },
+        { label: 'Aumentar zoom', role: 'zoomIn' },
+        { label: 'Diminuir zoom', role: 'zoomOut' },
+        { label: 'Zoom padrão', role: 'resetZoom' },
+        { type: 'separator' },
+        { label: 'Tela cheia', role: 'togglefullscreen' }
+      ]
+    },
+    {
+      label: 'Janela',
+      submenu: [
+        { label: 'Minimizar', role: 'minimize' },
+        { label: 'Fechar', role: 'close' }
+      ]
+    }
+  ]
+
+  Menu.setApplicationMenu(Menu.buildFromTemplate(template))
+}
+
 function createWindow(): void {
   const mainWindow = new BrowserWindow({
+    title: runtimeIdentity.appName,
     width: 1100,
     height: 720,
     show: is.dev,
@@ -146,6 +194,7 @@ app
   .whenReady()
   .then(async () => {
     electronApp.setAppUserModelId(runtimeIdentity.appUserModelId)
+    configurarMenuApp()
 
     app.on('browser-window-created', (_, window) => {
       optimizer.watchWindowShortcuts(window)

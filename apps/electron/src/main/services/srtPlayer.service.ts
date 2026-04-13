@@ -14,6 +14,7 @@ type StartPayload = {
   url: string
   muted?: boolean
   volume?: number
+  networkCachingMs?: number | null
 }
 
 let playerProcess: ChildProcess | null = null
@@ -190,6 +191,8 @@ export function setSrtPlayerMuted(muted: boolean) {
 
 export function startSrtPlayer(payload: StartPayload) {
   const volume = Math.max(0, Math.min(200, Math.round(payload.volume ?? 100)))
+  const networkCachingMs = Math.max(0, Math.min(10000, Math.round(payload.networkCachingMs ?? 200)))
+  sendCommand(`CACHE ${networkCachingMs}`)
   sendCommand(`VOLUME ${volume}`)
   sendCommand(`MUTE ${payload.muted ? 1 : 0}`)
   sendCommand(`PLAY ${payload.url}`)

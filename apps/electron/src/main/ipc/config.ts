@@ -26,9 +26,16 @@ type VmixConfigIpc = {
     title: string
     type: string
   } | null
+  inputSelecionadoCoberturas: {
+    key: string
+    number: string
+    title: string
+    type: string
+  } | null
   srt: {
     ativo: boolean
     porta: number | null
+    networkCachingMs: number | null
   }
 }
 
@@ -54,6 +61,7 @@ type GcApiConfigIpc = {
 const HOST_DEFAULT_IP = '127.0.0.1'
 const VMIX_DEFAULT_PORT = 8088
 const SRT_DEFAULT_PORT = 9001
+const SRT_DEFAULT_NETWORK_CACHING_MS = 200
 const GC_API_DEFAULT_DEVICE_NAME = hostname().trim() || 'gc-desktop'
 
 type SrtConfigIpc = VmixConfigIpc['srt']
@@ -68,28 +76,43 @@ function getAppModeOverride(): 'HOST' | 'REMOTO' | null {
 
 function normalizarConfigSrt(srt?: Partial<SrtConfigIpc> | null): SrtConfigIpc {
   const portaSrt = Number(srt?.porta)
+  const networkCachingMs = Number(srt?.networkCachingMs)
 
   return {
     ativo: Boolean(srt?.ativo),
-    porta: Number.isInteger(portaSrt) && portaSrt > 0 ? portaSrt : SRT_DEFAULT_PORT
+    porta: Number.isInteger(portaSrt) && portaSrt > 0 ? portaSrt : SRT_DEFAULT_PORT,
+    networkCachingMs:
+      Number.isInteger(networkCachingMs) && networkCachingMs >= 0
+        ? networkCachingMs
+        : SRT_DEFAULT_NETWORK_CACHING_MS
   }
 }
 
 function normalizarConfigVmix(vmix?: Partial<VmixConfigIpc> | null): VmixConfigIpc {
   const porta = Number(vmix?.porta)
+  const inputSelecionado = vmix?.inputSelecionado
+    ? {
+        key: String(vmix.inputSelecionado.key ?? '').trim(),
+        number: String(vmix.inputSelecionado.number ?? '').trim(),
+        title: String(vmix.inputSelecionado.title ?? '').trim(),
+        type: String(vmix.inputSelecionado.type ?? '').trim()
+      }
+    : null
+  const inputSelecionadoCoberturas = vmix?.inputSelecionadoCoberturas
+    ? {
+        key: String(vmix.inputSelecionadoCoberturas.key ?? '').trim(),
+        number: String(vmix.inputSelecionadoCoberturas.number ?? '').trim(),
+        title: String(vmix.inputSelecionadoCoberturas.title ?? '').trim(),
+        type: String(vmix.inputSelecionadoCoberturas.type ?? '').trim()
+      }
+    : null
 
   return {
     ativo: Boolean(vmix?.ativo),
     ip: String(vmix?.ip ?? '').trim(),
     porta: Number.isInteger(porta) && porta > 0 ? porta : VMIX_DEFAULT_PORT,
-    inputSelecionado: vmix?.inputSelecionado
-      ? {
-          key: String(vmix.inputSelecionado.key ?? '').trim(),
-          number: String(vmix.inputSelecionado.number ?? '').trim(),
-          title: String(vmix.inputSelecionado.title ?? '').trim(),
-          type: String(vmix.inputSelecionado.type ?? '').trim()
-        }
-      : null,
+    inputSelecionado,
+    inputSelecionadoCoberturas,
     srt: normalizarConfigSrt(vmix?.srt)
   }
 }
@@ -180,11 +203,11 @@ function aplicarDefaultsDeModo(
     return {
       modoConfig: {
         ...modoConfig,
-        hostIp: modoConfig.hostIp || HOST_DEFAULT_IP
+        hostIp: HOST_DEFAULT_IP
       },
       vmix: {
         ...vmix,
-        ip: vmix.ip || HOST_DEFAULT_IP
+        ip: HOST_DEFAULT_IP
       }
     }
   }
@@ -194,7 +217,7 @@ function aplicarDefaultsDeModo(
       modoConfig,
       vmix: {
         ...vmix,
-        ip: vmix.ip || modoConfig.hostIp
+        ip: modoConfig.hostIp || vmix.ip
       }
     }
   }
@@ -274,7 +297,7 @@ function getBundledExecutable(name: 'ffmpeg.exe') {
 }
 
 function montarEndpointSrt(vmix: VmixConfigIpc) {
-  return `srt://${vmix.ip}:${vmix.srt.porta}?timeout=5000000`
+  return `srt://${vmix.ip}:${vmix.srt.porta}?timeout=5000000&network-caching=${vmix.srt.networkCachingMs}`
 }
 
 async function aguardarInicializacaoPreview(processo: ChildProcess, timeoutMs = 5000): Promise<void> {
@@ -731,21 +754,16 @@ export function registrarIpcConfig() {
     if (conexaoOperacao.modo === 'REMOTO') {
       const store = await getStore()
       const vmixLocalAtual = normalizarConfigVmix(store.get('vmix'))
+      const srt = normalizarConfigSrt(vmix.srt)
       store.set('vmix', {
         ...vmixLocalAtual,
         ip: String(vmix.ip ?? '').trim() || conexaoOperacao.hostIp,
         porta: normalizarConfigVmix(vmix).porta,
         ativo: Boolean(vmix.ativo),
-        inputSelecionado: vmix.inputSelecionado
-          ? {
-              key: String(vmix.inputSelecionado.key ?? '').trim(),
-              number: String(vmix.inputSelecionado.number ?? '').trim(),
-              title: String(vmix.inputSelecionado.title ?? '').trim(),
-              type: String(vmix.inputSelecionado.type ?? '').trim()
-            }
-          : null
+        inputSelecionado: normalizarConfigVmix(vmix).inputSelecionado,
+        inputSelecionadoCoberturas: normalizarConfigVmix(vmix).inputSelecionadoCoberturas
       })
-      store.set('srtRemoto', normalizarConfigSrt(vmix.srt))
+      store.set('srtRemoto', srt)
       return
     }
 

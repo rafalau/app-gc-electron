@@ -196,14 +196,16 @@ export async function getModoConexaoOperacao(): Promise<OperacaoConexaoInfo> {
   const modo = getAppModeOverride() ?? store.get('modo')
   const conexao = store.get('conexaoApp')
   const configurado = String(conexao?.hostIp ?? '').trim()
-  const hostIp = configurado || getLocalIps().primary || '127.0.0.1'
+  const ipsLocais = getLocalIps()
+  const hostIp = configurado || ipsLocais.primary || '127.0.0.1'
+  const ipsDisponiveis = Array.from(new Set([hostIp, ...ipsLocais.all].filter(Boolean)))
 
   return {
     modo,
     hostIp,
     porta: operacaoServerPort,
     baseUrl: `http://${hostIp}:${operacaoServerPort}`,
-    ipsDisponiveis: [hostIp]
+    ipsDisponiveis
   }
 }
 

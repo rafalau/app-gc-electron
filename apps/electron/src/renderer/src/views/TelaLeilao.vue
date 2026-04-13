@@ -70,6 +70,10 @@ const {
 } = useAnimais(leilaoId)
 
 const tituloPagina = computed(() => leilao.value?.titulo_evento || 'Leilão')
+const tituloPaginaCurto = computed(() => {
+  const titulo = tituloPagina.value
+  return titulo.length > 27 ? `${titulo.slice(0, 27)}...` : titulo
+})
 const limparAberto = ref(false)
 const configuracoesAbertas = ref(false)
 const confirmacaoLimpar = ref('')
@@ -241,33 +245,39 @@ onMounted(async () => {
 <template>
   <div class="p-4 md:p-6 lg:p-8 min-h-screen bg-blue-50">
     <div class="flex flex-col gap-4 mb-5">
-      <div>
-        <button
-          class="text-sm text-blue-700 hover:text-blue-900 font-medium"
-          type="button"
-          @click="voltar"
-        >
-          ← Voltar para leilões
-        </button>
+      <div class="rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
+        <div class="flex flex-wrap items-center justify-between gap-3">
+          <div class="flex min-w-0 flex-wrap items-center gap-3">
+            <button
+              class="inline-flex items-center justify-center rounded-xl border border-yellow-300 bg-yellow-100 px-3 py-2 text-sm font-semibold text-yellow-800 shadow-sm transition hover:border-yellow-400 hover:bg-yellow-200"
+              type="button"
+              @click="voltar"
+            >
+              ← Voltar
+            </button>
 
-        <h1 class="text-2xl font-bold text-gray-900 mt-2">{{ tituloPagina }}</h1>
+            <h1 class="min-w-0 text-2xl font-bold text-gray-900" :title="tituloPagina">
+              {{ tituloPaginaCurto }}
+            </h1>
+          </div>
 
-        <div v-if="leilao" class="flex flex-wrap gap-2 mt-3">
-          <span
-            class="inline-flex items-center px-3 py-1 rounded-full bg-white border border-blue-200 text-sm font-medium text-blue-800"
-          >
-            Data: {{ formatarDataBR(leilao.data) }}
-          </span>
-          <span
-            class="inline-flex items-center px-3 py-1 rounded-full bg-white border border-green-200 text-sm font-medium text-green-700"
-          >
-            {{ leilao.total_animais }} animal(is)
-          </span>
-          <span
-            class="inline-flex items-center px-3 py-1 rounded-full bg-white border border-gray-200 text-sm font-medium text-gray-700"
-          >
-            Multiplicador: {{ leilao.multiplicador }}
-          </span>
+          <div v-if="leilao" class="flex flex-wrap gap-2">
+            <span
+              class="inline-flex items-center px-3 py-1 rounded-full bg-white border border-blue-200 text-sm font-medium text-blue-800"
+            >
+              {{ formatarDataBR(leilao.data) }}
+            </span>
+            <span
+              class="inline-flex items-center px-3 py-1 rounded-full bg-white border border-green-200 text-sm font-medium text-green-700"
+            >
+              {{ leilao.total_animais }} animal(is)
+            </span>
+            <span
+              class="inline-flex items-center px-3 py-1 rounded-full bg-white border border-gray-200 text-sm font-medium text-gray-700"
+            >
+              Multi.: {{ leilao.multiplicador }}
+            </span>
+          </div>
         </div>
       </div>
 
@@ -275,7 +285,7 @@ onMounted(async () => {
         <button
           v-if="leilao && leilao.total_animais > 0"
           type="button"
-          class="botao-ao-vivo inline-flex items-center justify-center gap-1.5 rounded-lg border border-rose-300 bg-rose-600 px-2.5 py-1.5 text-xs font-medium text-white shadow-sm shadow-rose-300/70 transition hover:border-rose-200 hover:bg-rose-500 max-[640px]:w-full"
+          class="botao-ao-vivo inline-flex items-center justify-center gap-1.5 rounded-lg border border-rose-300 bg-rose-600 px-3 py-1.5 text-sm font-medium text-white shadow-sm shadow-rose-300/70 transition hover:border-rose-200 hover:bg-rose-500 max-[640px]:w-full"
           @click="abrirModoOperacao()"
         >
           <span class="h-2 w-2 rounded-full bg-white/95" />

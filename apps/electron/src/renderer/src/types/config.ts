@@ -3,6 +3,7 @@ export type VmixConfig = {
   ip: string
   porta: number
   inputSelecionado: VmixInput | null
+  inputSelecionadoCoberturas: VmixInput | null
   srt: SrtConfig
 }
 
@@ -16,6 +17,7 @@ export type VmixInput = {
 export type SrtConfig = {
   ativo: boolean
   porta: number | null
+  networkCachingMs: number | null
 }
 
 export type SrtPreviewStatus = {

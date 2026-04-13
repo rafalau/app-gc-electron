@@ -127,6 +127,7 @@ export type VmixConfig = {
   ip: string
   porta: number
   inputSelecionado: VmixInput | null
+  inputSelecionadoCoberturas: VmixInput | null
   srt: SrtConfig
 }
 
@@ -140,6 +141,7 @@ export type VmixInput = {
 export type SrtConfig = {
   ativo: boolean
   porta: number | null
+  networkCachingMs: number | null
 }
 
 export type SrtPreviewStatus = {
@@ -299,7 +301,12 @@ declare global {
       setBounds: (bounds: { x: number; y: number; width: number; height: number }) => Promise<{ ok: boolean }>
       setVisible: (visible: boolean) => Promise<{ ok: boolean }>
       setMute: (muted: boolean) => Promise<{ ok: boolean }>
-      start: (payload: { url: string; muted?: boolean; volume?: number }) => Promise<{ ok: boolean }>
+      start: (payload: {
+        url: string
+        muted?: boolean
+        volume?: number
+        networkCachingMs?: number | null
+      }) => Promise<{ ok: boolean }>
       stop: () => Promise<{ ok: boolean }>
       shutdown: () => Promise<{ ok: boolean }>
     }

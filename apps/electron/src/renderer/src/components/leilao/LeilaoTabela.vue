@@ -87,11 +87,6 @@ function getDropdownItems(leilao: Leilao) {
       action: () => emit('editar', leilao)
     },
     {
-      label: 'Modo Operação',
-      icon: 'fa-broadcast-tower',
-      action: () => emit('operacao', leilao)
-    },
-    {
       label: 'Excluir evento',
       icon: 'fa-trash',
       color: 'danger' as const,
@@ -184,6 +179,15 @@ function cancelarExclusao() {
 
         <!-- Ações -->
         <div class="col-span-2 flex items-center justify-center gap-2">
+          <button
+            type="button"
+            class="relative inline-flex h-9 w-9 items-center justify-center rounded-lg border border-red-200 bg-red-50 text-red-700 shadow-sm transition hover:border-red-300 hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-1"
+            title="Modo Operação"
+            @click="emit('operacao', l)"
+          >
+            <span class="absolute inline-flex h-full w-full animate-ping rounded-lg bg-red-300 opacity-25"></span>
+            <i class="fas fa-broadcast-tower relative text-sm" />
+          </button>
           <BaseDropdown :items="getDropdownItems(l)" label="Ações" />
         </div>
       </div>

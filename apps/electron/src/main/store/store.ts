@@ -3,6 +3,7 @@ import { hostname } from 'node:os'
 
 const VMIX_DEFAULT_PORT = 8088
 const SRT_DEFAULT_PORT = 9001
+const SRT_DEFAULT_NETWORK_CACHING_MS = 200
 const GC_API_DEFAULT_DEVICE_NAME = hostname().trim() || 'gc-desktop'
 const GC_API_DEFAULT_BASE_URL = 'https://api-app-gc.remate360.com.br'
 
@@ -23,14 +24,22 @@ type StoreSchema = {
       title: string
       type: string
     } | null
+    inputSelecionadoCoberturas: {
+      key: string
+      number: string
+      title: string
+      type: string
+    } | null
     srt: {
       ativo: boolean
       porta: number | null
+      networkCachingMs: number | null
     }
   }
   srtRemoto: {
     ativo: boolean
     porta: number | null
+    networkCachingMs: number | null
   }
   layoutAnimaisPorLeilao: Record<
     string,
@@ -104,14 +113,17 @@ export async function getStore() {
         ip: '',
         porta: VMIX_DEFAULT_PORT,
         inputSelecionado: null,
+        inputSelecionadoCoberturas: null,
         srt: {
           ativo: false,
-          porta: SRT_DEFAULT_PORT
+          porta: SRT_DEFAULT_PORT,
+          networkCachingMs: SRT_DEFAULT_NETWORK_CACHING_MS
         }
       },
       srtRemoto: {
         ativo: false,
-        porta: SRT_DEFAULT_PORT
+        porta: SRT_DEFAULT_PORT,
+        networkCachingMs: SRT_DEFAULT_NETWORK_CACHING_MS
       },
       layoutAnimaisPorLeilao: {},
       operacaoPorLeilao: {},

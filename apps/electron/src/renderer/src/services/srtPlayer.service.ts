@@ -19,7 +19,12 @@ export async function definirMuteSrtPlayer(muted: boolean) {
   return window.srtPlayer.setMute(muted)
 }
 
-export async function iniciarSrtPlayer(payload: { url: string; muted?: boolean; volume?: number }) {
+export async function iniciarSrtPlayer(payload: {
+  url: string
+  muted?: boolean
+  volume?: number
+  networkCachingMs?: number | null
+}) {
   return window.srtPlayer.start(payload)
 }
 

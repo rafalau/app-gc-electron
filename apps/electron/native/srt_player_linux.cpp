@@ -26,6 +26,7 @@ struct AppState {
   int width = 640;
   int height = 360;
   int volume = 100;
+  int network_caching_ms = 200;
   bool muted = false;
   pid_t mpv_pid = -1;
 };
@@ -102,6 +103,7 @@ void play_media(AppState& state, const std::string& url) {
 
     const std::string wid = std::to_string(static_cast<unsigned long>(state.child));
     const std::string volume = std::to_string(state.volume);
+    const std::string cache_secs = std::to_string(static_cast<double>(state.network_caching_ms) / 1000.0);
     const char* mute = state.muted ? "yes" : "no";
 
     execlp(
@@ -122,6 +124,7 @@ void play_media(AppState& state, const std::string& url) {
       "--video-sync=display-resample",
       "--audio-display=no",
       "--cache=yes",
+      ("--cache-secs=" + cache_secs).c_str(),
       "--demuxer-max-back-bytes=50MiB",
       "--demuxer-max-bytes=50MiB",
       ("--wid=" + wid).c_str(),
@@ -211,6 +214,15 @@ void handle_command(AppState& state, const std::string& line) {
     if (value < 0) value = 0;
     if (value > 200) value = 200;
     state.volume = value;
+    return;
+  }
+
+  if (cmd == "CACHE") {
+    int value = 200;
+    iss >> value;
+    if (value < 0) value = 0;
+    if (value > 10000) value = 10000;
+    state.network_caching_ms = value;
     return;
   }
 

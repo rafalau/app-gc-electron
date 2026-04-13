@@ -38,7 +38,10 @@ export function registrarIpcSrtPlayer() {
 
   ipcMain.handle(
     'srt-player:start',
-    async (_evt, payload: { url: string; muted?: boolean; volume?: number }) => {
+    async (
+      _evt,
+      payload: { url: string; muted?: boolean; volume?: number; networkCachingMs?: number | null }
+    ) => {
       startSrtPlayer(payload)
       return { ok: true }
     }

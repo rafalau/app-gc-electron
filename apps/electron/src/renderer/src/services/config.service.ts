@@ -10,6 +10,7 @@ import { getFriendlyErrorMessage } from '../utils/errorMessage'
 
 const VMIX_DEFAULT_PORT = 8088
 const SRT_DEFAULT_PORT = 9001
+const SRT_DEFAULT_NETWORK_CACHING_MS = 200
 
 function normalizarGcApiConfig(config: GcApiConfig): GcApiConfig {
   return {
@@ -34,15 +35,21 @@ function normalizarInput(input: VmixInput | null): VmixInput | null {
 function normalizarConfig(config: VmixConfig): VmixConfig {
   const porta = Number(config.porta)
   const portaSrt = Number(config.srt?.porta)
+  const networkCachingMs = Number(config.srt?.networkCachingMs)
 
   return {
     ativo: Boolean(config.ativo),
     ip: String(config.ip ?? '').trim(),
     porta: Number.isInteger(porta) && porta > 0 ? porta : VMIX_DEFAULT_PORT,
     inputSelecionado: normalizarInput(config.inputSelecionado),
+    inputSelecionadoCoberturas: normalizarInput(config.inputSelecionadoCoberturas),
     srt: {
       ativo: Boolean(config.srt?.ativo),
-      porta: Number.isInteger(portaSrt) && portaSrt > 0 ? portaSrt : SRT_DEFAULT_PORT
+      porta: Number.isInteger(portaSrt) && portaSrt > 0 ? portaSrt : SRT_DEFAULT_PORT,
+      networkCachingMs:
+        Number.isInteger(networkCachingMs) && networkCachingMs >= 0
+          ? networkCachingMs
+          : SRT_DEFAULT_NETWORK_CACHING_MS
     }
   }
 }

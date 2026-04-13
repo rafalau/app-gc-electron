@@ -13,6 +13,7 @@ import type { GcApiConfig, GcApiSyncSummary } from '@renderer/types/config'
 import {
   obterConfiguracaoGcApi,
   obterModoConfig,
+  salvarModoConfig,
   salvarConfiguracaoGcApi,
   testarConfiguracaoGcApi
 } from '@renderer/services/config.service'
@@ -23,12 +24,21 @@ import { applyUppercaseInput } from '@renderer/utils/uppercaseInput'
 const router = useRouter()
 const conexaoOperacao = ref<Awaited<ReturnType<typeof obterConexaoOperacao>> | null>(null)
 const copiandoIp = ref(false)
+const salvandoIpHost = ref(false)
+const ipHostSelecionado = ref('')
 const modoAtual = ref<'HOST' | 'REMOTO' | null>(null)
 const gcApiSyncHabilitado = computed(() => Boolean(gcApiConfig.value.accessToken.trim()))
 const ipHostPrincipal = computed(() => {
   if (!conexaoOperacao.value || conexaoOperacao.value.modo !== 'HOST') return ''
   return conexaoOperacao.value.hostIp
 })
+const ipsHostDisponiveis = computed(() => {
+  if (!conexaoOperacao.value || conexaoOperacao.value.modo !== 'HOST') return []
+  return Array.from(
+    new Set([conexaoOperacao.value.hostIp, ...conexaoOperacao.value.ipsDisponiveis].filter(Boolean))
+  )
+})
+const ipHostExibido = computed(() => ipHostSelecionado.value || ipHostPrincipal.value)
 
 const {
   aba,
@@ -67,12 +77,6 @@ function irAnimais(leilao: Leilao) {
 
 function irOperacao(leilao: Leilao) {
   router.push(`/operacao/${leilao.id}`)
-}
-
-async function voltarSelecaoModo() {
-  if (modoAtual.value === 'REMOTO') {
-    router.replace('/conexao')
-  }
 }
 
 function desconectarRemoto() {
@@ -207,41 +211,71 @@ async function sincronizarComGcApi() {
 }
 
 async function copiarIpHost() {
-  if (!ipHostPrincipal.value) return
-  await navigator.clipboard.writeText(ipHostPrincipal.value)
+  if (!ipHostExibido.value) return
+  await navigator.clipboard.writeText(ipHostExibido.value)
   copiandoIp.value = true
   window.setTimeout(() => {
     copiandoIp.value = false
   }, 1200)
 }
 
+async function definirIpHostPrincipal() {
+  if (!ipHostSelecionado.value || ipHostSelecionado.value === ipHostPrincipal.value) return
+
+  salvandoIpHost.value = true
+  try {
+    await salvarModoConfig({
+      modo: 'HOST',
+      hostIp: ipHostSelecionado.value,
+      portaApp: conexaoOperacao.value?.porta ?? 18452
+    })
+    conexaoOperacao.value = await obterConexaoOperacao()
+    ipHostSelecionado.value = conexaoOperacao.value.hostIp
+  } finally {
+    salvandoIpHost.value = false
+  }
+}
+
 onMounted(async () => {
   const modoConfig = await obterModoConfig()
   modoAtual.value = modoConfig.modo
   conexaoOperacao.value = await obterConexaoOperacao()
+  ipHostSelecionado.value = conexaoOperacao.value.hostIp
   gcApiConfig.value = await obterConfiguracaoGcApi()
 })
 </script>
 
 <template>
   <div class="p-4 md:p-6 lg:p-8 min-h-screen bg-blue-50">
-    <div v-if="modoAtual === 'REMOTO'" class="mb-4">
-      <button
-        class="text-sm text-blue-700 hover:text-blue-900 font-medium"
-        type="button"
-        @click="voltarSelecaoModo"
-      >
-        ← Alterar IP do host
-      </button>
-    </div>
-
     <div
       v-if="conexaoOperacao?.modo === 'HOST' && ipHostPrincipal"
       class="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-blue-200 bg-white px-4 py-3 shadow-sm"
     >
-      <div>
-        <div class="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">IP do Host</div>
-        <div class="mt-1 text-lg font-bold text-slate-900">{{ ipHostPrincipal }}</div>
+      <div class="flex flex-wrap items-center gap-2">
+        <label
+          class="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500"
+          for="ip-host-selecionado"
+        >
+          IP do Host
+        </label>
+        <select
+          id="ip-host-selecionado"
+          v-model="ipHostSelecionado"
+          class="rounded-lg border border-slate-200 bg-white px-2 py-1 text-sm font-semibold text-slate-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+        >
+          <option v-for="ip in ipsHostDisponiveis" :key="ip" :value="ip">
+            {{ ip }}
+          </option>
+        </select>
+        <button
+          v-if="ipHostSelecionado && ipHostSelecionado !== ipHostPrincipal"
+          type="button"
+          class="rounded-lg border border-blue-200 bg-blue-50 px-2 py-1 text-xs font-semibold text-blue-700 transition hover:border-blue-300 hover:bg-blue-100"
+          :disabled="salvandoIpHost"
+          @click="definirIpHostPrincipal"
+        >
+          {{ salvandoIpHost ? 'Salvando...' : 'Usar como principal' }}
+        </button>
       </div>
 
       <button
@@ -273,19 +307,24 @@ onMounted(async () => {
       </button>
     </div>
 
-    <!-- Cabeçalho com Busca e Botão -->
-    <div class="flex flex-col md:flex-row items-start md:items-center justify-between gap-3 mb-3">
-      <div class="flex-1 w-full md:max-w-md relative">
-        <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
-        <input
-          v-model="busca"
-          class="w-full border bg-white border-gray-300 rounded-lg pl-10 pr-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          type="text"
-          @input="applyUppercaseInput($event, (value) => (busca = value))"
-        />
+    <!-- Cabeçalho com filtros e ações -->
+    <div class="mb-3 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+      <div class="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+        <BaseButton :variante="aba === 'ATIVOS' ? 'primario' : 'secundario'" @click="aba = 'ATIVOS'">
+          <i class="fas fa-check mr-1" />
+          Ativos
+        </BaseButton>
+
+        <BaseButton
+          :variante="aba === 'ARQUIVADOS' ? 'primario' : 'secundario'"
+          @click="aba = 'ARQUIVADOS'"
+        >
+          <i class="fas fa-archive mr-1" />
+          Arquivados
+        </BaseButton>
       </div>
 
-      <div class="flex w-full flex-col gap-2 md:w-auto md:flex-row">
+      <div class="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
         <BaseDropdown
           v-if="modoAtual !== 'REMOTO'"
           label="Sincronização"
@@ -312,27 +351,16 @@ onMounted(async () => {
       </div>
     </div>
 
-    <!-- Espaço entre busca e abas -->
-    <div class="mb-3" />
-
-    <!-- Abas -->
-    <div class="flex gap-2 mb-3">
-      <BaseButton :variante="aba === 'ATIVOS' ? 'primario' : 'secundario'" @click="aba = 'ATIVOS'">
-        <i class="fas fa-check mr-1" />
-        Ativos
-      </BaseButton>
-
-      <BaseButton
-        :variante="aba === 'ARQUIVADOS' ? 'primario' : 'secundario'"
-        @click="aba = 'ARQUIVADOS'"
-      >
-        <i class="fas fa-archive mr-1" />
-        Arquivados
-      </BaseButton>
+    <!-- Busca -->
+    <div class="relative mb-3 w-full">
+      <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
+      <input
+        v-model="busca"
+        class="w-full border bg-white border-gray-300 rounded-lg pl-10 pr-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+        type="text"
+        @input="applyUppercaseInput($event, (value) => (busca = value))"
+      />
     </div>
-
-    <!-- Espaço entre abas e tabela -->
-    <div class="mb-3" />
 
     <!-- Tabela -->
     <LeilaoTabela

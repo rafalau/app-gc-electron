@@ -95,9 +95,11 @@ const formVmix = ref<VmixConfig>({
   ip: '',
   porta: VMIX_DEFAULT_PORT,
   inputSelecionado: null,
+  inputSelecionadoCoberturas: null,
   srt: {
     ativo: false,
-    porta: SRT_DEFAULT_PORT
+    porta: SRT_DEFAULT_PORT,
+    networkCachingMs: 200
   }
 })
 const animalSelecionado = computed(
@@ -172,14 +174,23 @@ const totalDolarFormatado = computed(() => {
   return formatarMoeda(Math.round((valorLance * multiplicador) / cotacao))
 })
 const vmixConfigurado = computed(() => {
+  const inputOverlay = getInputOverlayVmix()
+
   return Boolean(
     formVmix.value.ativo &&
       formVmix.value.ip.trim() &&
       Number.isInteger(Number(formVmix.value.porta)) &&
       Number(formVmix.value.porta) > 0 &&
-      formVmix.value.inputSelecionado?.key
+      inputOverlay?.key
   )
 })
+function getInputOverlayVmix() {
+  if (animalSelecionado.value?.categoria === 'COBERTURAS') {
+    return formVmix.value.inputSelecionadoCoberturas
+  }
+
+  return formVmix.value.inputSelecionado
+}
 const srtIp = computed(() => {
   return formVmix.value.ip.trim()
 })
@@ -193,7 +204,7 @@ const srtConfigurado = computed(() => {
 })
 const endpointSrt = computed(() => {
   if (!srtConfigurado.value) return ''
-  return `srt://${srtIp.value}:${formVmix.value.srt.porta}?timeout=5000000`
+  return `srt://${srtIp.value}:${formVmix.value.srt.porta}?timeout=5000000&network-caching=${formVmix.value.srt.networkCachingMs ?? 200}`
 })
 function voltar() {
   router.push(`/leilao/${leilaoId}`)
@@ -527,7 +538,8 @@ async function sincronizarPlaybackSrtPlayer() {
   await iniciarSrtPlayer({
     url: endpointSrt.value,
     muted: srtPlayerMutado.value,
-    volume: 100
+    volume: 100,
+    networkCachingMs: formVmix.value.srt.networkCachingMs ?? 200
   })
 }
 
@@ -577,10 +589,17 @@ async function enviarOverlayGc() {
 
   try {
     const config = await obterConfiguracaoVmix()
-    if (!config.ativo || !config.inputSelecionado?.key) {
+    const inputOverlay = animalSelecionado.value?.categoria === 'COBERTURAS'
+      ? config.inputSelecionadoCoberturas
+      : config.inputSelecionado
+
+    if (!config.ativo || !inputOverlay?.key) {
       throw new Error('Configure e ative o vMix antes de usar o overlay.')
     }
-    await acionarOverlayVmix(config)
+    await acionarOverlayVmix({
+      ...config,
+      inputSelecionado: inputOverlay
+    })
   } catch (error) {
     erroOperacao.value = getFriendlyErrorMessage(error)
   } finally {
@@ -1126,11 +1145,11 @@ onUnmounted(() => {
     <div class="mx-auto flex w-full min-w-0 flex-col gap-4">
       <div class="flex flex-wrap items-center justify-between gap-3 max-[500px]:flex-col max-[500px]:items-stretch">
         <button
-          class="text-left text-sm font-medium text-blue-700 transition hover:text-blue-900 max-[500px]:block max-[500px]:w-full"
+          class="inline-flex items-center justify-center rounded-xl border border-yellow-300 bg-yellow-100 px-3 py-2 text-left text-sm font-semibold text-yellow-800 shadow-sm transition hover:border-yellow-400 hover:bg-yellow-200 max-[500px]:flex max-[500px]:w-full"
           type="button"
           @click="voltar"
         >
-          ← Voltar para animais
+          ← Voltar
         </button>
 
         <button
@@ -1152,11 +1171,11 @@ onUnmounted(() => {
         </button>
       </div>
 
-      <div class="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
+      <div class="rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm">
         <div class="flex items-start justify-between gap-3">
           <div class="min-w-0">
-            <h1 class="text-xl font-bold text-slate-900">{{ tituloPagina }}</h1>
-            <div v-if="resumoLeilao" class="mt-2 text-xs font-medium text-slate-600">
+            <h1 class="text-lg font-bold leading-tight text-slate-900">{{ tituloPagina }}</h1>
+            <div v-if="resumoLeilao" class="mt-0.5 text-xs font-medium leading-tight text-slate-600">
               {{ resumoLeilao }}
             </div>
           </div>
@@ -1173,8 +1192,7 @@ onUnmounted(() => {
       </div>
 
       <div
-        class="grid grid-cols-1 gap-4"
-        :class="srtConfigurado ? 'md:grid-cols-2 md:items-start' : ''"
+        class="grid grid-cols-1 gap-4 md:grid-cols-2 md:items-start"
       >
         <div v-if="srtConfigurado" class="flex min-w-0 flex-col gap-4">
           <div class="overflow-hidden border border-slate-300 bg-white shadow-sm">
@@ -1217,7 +1235,181 @@ onUnmounted(() => {
             </div>
           </div>
 
+          <button
+            v-if="vmixConfigurado"
+            type="button"
+            class="inline-flex w-full items-center justify-center rounded-xl border border-slate-400 bg-slate-600 px-4 py-3 text-sm font-semibold uppercase tracking-[0.14em] text-white shadow-sm transition hover:bg-slate-700 hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-60"
+            :disabled="acionandoOverlayVmix"
+            @click="enviarOverlayGc"
+          >
+            {{ acionandoOverlayVmix ? 'Enviando...' : 'OVERLAY GC' }}
+          </button>
+
           <div class="hidden rounded-3xl border border-slate-200 bg-white p-4 shadow-sm md:block">
+            <div class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
+              JSON vMix
+            </div>
+
+            <div
+              v-if="erroOperacao"
+              class="mt-3 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700"
+            >
+              {{ erroOperacao }}
+            </div>
+
+            <div class="mt-3 flex flex-col gap-3">
+              <div
+                v-for="url in arquivoInfo?.urls_http || []"
+                :key="url"
+                class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2"
+              >
+                <div class="flex items-start justify-between gap-3">
+                  <div class="min-w-0">
+                    <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+                      URL
+                    </div>
+                    <div class="mt-1 break-all text-sm text-slate-700">
+                      {{ url }}
+                    </div>
+                  </div>
+
+                  <button
+                    type="button"
+                    class="inline-flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-white text-slate-500 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
+                    @click="copiarTexto(url, 'caminho')"
+                  >
+                    <i
+                      :class="[
+                        'fas text-sm',
+                        copiando === 'caminho' ? 'fa-check' : 'fa-copy'
+                      ]"
+                    />
+                  </button>
+                </div>
+              </div>
+
+              <div
+                v-if="!arquivoInfo?.urls_http?.length"
+                class="rounded-xl border border-slate-200 bg-slate-50 px-3 py-2"
+              >
+                <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+                  URL
+                </div>
+                <div class="mt-1 break-all text-sm text-slate-700">
+                  Carregando...
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div
+          v-if="!srtConfigurado && animalSelecionado"
+          class="hidden min-w-0 flex-col gap-4 md:flex"
+        >
+          <div class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+            <div class="flex items-start justify-between gap-3">
+              <div class="text-sm font-semibold uppercase tracking-[0.16em] text-blue-700">
+                Lote {{ animalSelecionado.lote }}
+              </div>
+              <span
+                class="inline-flex items-center rounded-full px-3 py-1 text-[11px] font-semibold uppercase tracking-[0.14em]"
+                :class="
+                  animalSelecionado.categoria === 'COBERTURAS'
+                    ? 'bg-amber-100 text-amber-800'
+                    : 'bg-emerald-100 text-emerald-800'
+                "
+              >
+                {{ animalSelecionado.categoria }}
+              </span>
+            </div>
+
+            <div class="mt-3 text-lg font-bold text-slate-900 break-words">
+              {{ animalSelecionado.nome }}
+            </div>
+
+            <div class="mt-4 space-y-3 text-sm text-slate-700">
+              <div>
+                <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+                  {{
+                    animalSelecionado.categoria === 'COBERTURAS'
+                      ? 'Pacotes Disponíveis'
+                      : 'Informações'
+                  }}
+                </div>
+                <div
+                  v-if="animalSelecionado.categoria === 'COBERTURAS'"
+                  class="mt-1 space-y-1.5"
+                >
+                  <div
+                    v-for="condicao in animalSelecionado.condicoes_cobertura"
+                    :key="condicao"
+                    class="rounded-xl bg-slate-50 px-3 py-2 break-words"
+                  >
+                    {{ condicao }}
+                  </div>
+                  <div
+                    v-if="animalSelecionado.condicoes_cobertura.length === 0"
+                    class="mt-1 text-slate-500"
+                  >
+                    Sem condições
+                  </div>
+                </div>
+                <div v-else class="mt-1 break-words">
+                  {{ getInformacoesAnimal() || 'Sem informações' }}
+                </div>
+              </div>
+
+              <div
+                v-if="animalSelecionado.categoria === 'COBERTURAS' && getInformacoesAnimal()"
+              >
+                <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+                  Informações
+                </div>
+                <div class="mt-1 break-words">
+                  {{ getInformacoesAnimal() }}
+                </div>
+              </div>
+
+              <div v-if="getRaca()">
+                <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+                  Raça
+                </div>
+                <div class="mt-1 break-words">
+                  {{ getRaca() }}
+                </div>
+              </div>
+
+              <div>
+                <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+                  Genealogia
+                </div>
+                <div class="mt-1 break-words">
+                  {{ getGenealogiaAnimal() || 'Sem genealogia' }}
+                </div>
+              </div>
+
+              <div v-if="getCondicoesEspecificas()">
+                <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+                  Condições Específicas
+                </div>
+                <div class="mt-1 break-words">
+                  {{ getCondicoesEspecificas() }}
+                </div>
+              </div>
+
+              <div v-if="getVendedor()">
+                <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-slate-400">
+                  Vendedor
+                </div>
+                <div class="mt-1 break-words">
+                  {{ getVendedor() }}
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm">
             <div class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
               JSON vMix
             </div>
@@ -1474,7 +1666,7 @@ onUnmounted(() => {
               v-for="valor in AJUSTES_LANCE_RAPIDO"
               :key="`mais-${valor}`"
               type="button"
-              class="min-w-0 flex-1 rounded-lg border border-emerald-200 bg-emerald-50 px-1 py-1.5 text-[11px] font-semibold leading-none text-emerald-700 transition hover:border-emerald-300 hover:bg-emerald-100"
+              class="min-w-0 flex-1 rounded-lg border border-emerald-200 bg-emerald-50 px-1 py-1.5 text-sm font-semibold leading-none text-emerald-700 transition hover:border-emerald-300 hover:bg-emerald-100"
               @click="ajustarLanceRapido(valor)"
             >
               +{{ valor }}
@@ -1486,7 +1678,7 @@ onUnmounted(() => {
               v-for="valor in AJUSTES_LANCE_RAPIDO"
               :key="`menos-${valor}`"
               type="button"
-              class="min-w-0 flex-1 rounded-lg border border-rose-200 bg-rose-50 px-1 py-1.5 text-[11px] font-semibold leading-none text-rose-700 transition hover:border-rose-300 hover:bg-rose-100"
+              class="min-w-0 flex-1 rounded-lg border border-rose-200 bg-rose-50 px-1 py-1.5 text-sm font-semibold leading-none text-rose-700 transition hover:border-rose-300 hover:bg-rose-100"
               @click="ajustarLanceRapido(-valor)"
             >
               -{{ valor }}
@@ -1494,7 +1686,7 @@ onUnmounted(() => {
           </div>
 
           <button
-            v-if="vmixConfigurado"
+            v-if="vmixConfigurado && !srtConfigurado"
             type="button"
             class="inline-flex w-full items-center justify-center rounded-xl border border-slate-400 bg-slate-600 px-4 py-3 text-sm font-semibold uppercase tracking-[0.14em] text-white shadow-sm transition hover:bg-slate-700 hover:border-slate-500 disabled:cursor-not-allowed disabled:opacity-60"
             :disabled="acionandoOverlayVmix"
@@ -1525,6 +1717,7 @@ onUnmounted(() => {
           <div
             v-if="animalSelecionado"
             class="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+            :class="!srtConfigurado ? 'md:hidden' : ''"
           >
             <div class="flex items-start justify-between gap-3">
               <div class="text-sm font-semibold uppercase tracking-[0.16em] text-blue-700">
@@ -1688,7 +1881,7 @@ onUnmounted(() => {
 
       <div
         class="rounded-3xl border border-slate-200 bg-white p-4 shadow-sm"
-        :class="srtConfigurado ? 'hidden' : ''"
+        :class="srtConfigurado ? 'hidden' : 'md:hidden'"
       >
         <div class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
           JSON vMix

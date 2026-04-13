@@ -159,28 +159,32 @@ const configApi = {
     ip: string
     porta: number
     inputSelecionado: { key: string; number: string; title: string; type: string } | null
-    srt: { ativo: boolean; porta: number | null }
+    inputSelecionadoCoberturas?: { key: string; number: string; title: string; type: string } | null
+    srt: { ativo: boolean; porta: number | null; networkCachingMs?: number | null }
   }) => ipcRenderer.invoke('config:setVmix', vmix),
   listarInputsVmix: (vmix: {
     ativo: boolean
     ip: string
     porta: number
     inputSelecionado: { key: string; number: string; title: string; type: string } | null
-    srt: { ativo: boolean; porta: number | null }
+    inputSelecionadoCoberturas?: { key: string; number: string; title: string; type: string } | null
+    srt: { ativo: boolean; porta: number | null; networkCachingMs?: number | null }
   }) => ipcRenderer.invoke('config:listarInputsVmix', vmix),
   acionarOverlayVmix: (vmix: {
     ativo: boolean
     ip: string
     porta: number
     inputSelecionado: { key: string; number: string; title: string; type: string } | null
-    srt: { ativo: boolean; porta: number | null }
+    inputSelecionadoCoberturas?: { key: string; number: string; title: string; type: string } | null
+    srt: { ativo: boolean; porta: number | null; networkCachingMs?: number | null }
   }) => ipcRenderer.invoke('config:acionarOverlayVmix', vmix),
   iniciarPreviewSrt: (vmix: {
     ativo: boolean
     ip: string
     porta: number
     inputSelecionado: { key: string; number: string; title: string; type: string } | null
-    srt: { ativo: boolean; porta: number | null }
+    inputSelecionadoCoberturas?: { key: string; number: string; title: string; type: string } | null
+    srt: { ativo: boolean; porta: number | null; networkCachingMs?: number | null }
   }) => ipcRenderer.invoke('config:iniciarPreviewSrt', vmix),
   pararPreviewSrt: () => ipcRenderer.invoke('config:pararPreviewSrt'),
   getStatusPreviewSrt: () => ipcRenderer.invoke('config:getStatusPreviewSrt'),
@@ -189,7 +193,8 @@ const configApi = {
     ip: string
     porta: number
     inputSelecionado: { key: string; number: string; title: string; type: string } | null
-    srt: { ativo: boolean; porta: number | null }
+    inputSelecionadoCoberturas?: { key: string; number: string; title: string; type: string } | null
+    srt: { ativo: boolean; porta: number | null; networkCachingMs?: number | null }
   }) => ipcRenderer.invoke('config:abrirMonitorSrtExterno', vmix),
   pararMonitorSrtExterno: () => ipcRenderer.invoke('config:pararMonitorSrtExterno'),
   getApiImportProviders: () => ipcRenderer.invoke('config:getApiImportProviders'),
@@ -283,7 +288,7 @@ const srtPlayerApi = {
     ipcRenderer.invoke('srt-player:setBounds', bounds),
   setVisible: (visible: boolean) => ipcRenderer.invoke('srt-player:setVisible', visible),
   setMute: (muted: boolean) => ipcRenderer.invoke('srt-player:setMute', muted),
-  start: (payload: { url: string; muted?: boolean; volume?: number }) =>
+  start: (payload: { url: string; muted?: boolean; volume?: number; networkCachingMs?: number | null }) =>
     ipcRenderer.invoke('srt-player:start', payload),
   stop: () => ipcRenderer.invoke('srt-player:stop'),
   shutdown: () => ipcRenderer.invoke('srt-player:shutdown')

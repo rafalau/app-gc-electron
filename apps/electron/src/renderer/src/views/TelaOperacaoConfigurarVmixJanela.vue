@@ -8,6 +8,7 @@ import type { ModoConfig, VmixConfig, VmixInput } from '@renderer/types/config'
 const HOST_DEFAULT_IP = '127.0.0.1'
 const VMIX_DEFAULT_PORT = 8088
 const SRT_DEFAULT_PORT = 9001
+const SRT_DEFAULT_NETWORK_CACHING_MS = 200
 const windowComConfig = window as unknown as {
   config?: Partial<Window['config']>
 }
@@ -25,9 +26,11 @@ const form = ref<VmixConfig>({
   ip: '',
   porta: VMIX_DEFAULT_PORT,
   inputSelecionado: null,
+  inputSelecionadoCoberturas: null,
   srt: {
     ativo: false,
-    porta: SRT_DEFAULT_PORT
+    porta: SRT_DEFAULT_PORT,
+    networkCachingMs: SRT_DEFAULT_NETWORK_CACHING_MS
   }
 })
 
@@ -66,15 +69,22 @@ function getIpPadraoVmix(conexao?: ModoConfig | null) {
 
 function aplicarDefaultsFormulario(config: VmixConfig, conexao: ModoConfig): VmixConfig {
   const ipPadraoVmix = getIpPadraoVmix(conexao)
-  const ipVmix = String(config.ip ?? '').trim() || ipPadraoVmix
+  const ipVmix = conexao.modo === 'HOST' ? HOST_DEFAULT_IP : String(config.ip ?? '').trim() || ipPadraoVmix
+  const networkCachingMs = Number(config.srt?.networkCachingMs)
 
   return {
     ...config,
     ip: ipVmix,
     porta: Number(config.porta) > 0 ? config.porta : VMIX_DEFAULT_PORT,
+    inputSelecionado: config.inputSelecionado ?? null,
+    inputSelecionadoCoberturas: config.inputSelecionadoCoberturas ?? null,
     srt: {
       ...config.srt,
-      porta: Number(config.srt?.porta) > 0 ? config.srt.porta : SRT_DEFAULT_PORT
+      porta: Number(config.srt?.porta) > 0 ? config.srt.porta : SRT_DEFAULT_PORT,
+      networkCachingMs:
+        Number.isInteger(networkCachingMs) && networkCachingMs >= 0
+          ? networkCachingMs
+          : SRT_DEFAULT_NETWORK_CACHING_MS
     }
   }
 }
@@ -82,10 +92,11 @@ function aplicarDefaultsFormulario(config: VmixConfig, conexao: ModoConfig): Vmi
 function normalizarConfigFormulario(config: VmixConfig): VmixConfig {
   const porta = Number(config.porta)
   const portaSrt = Number(config.srt?.porta)
+  const networkCachingMs = Number(config.srt?.networkCachingMs)
 
   return {
     ativo: Boolean(config.ativo),
-    ip: String(config.ip ?? '').trim(),
+    ip: modoOperacao.value === 'HOST' ? HOST_DEFAULT_IP : String(config.ip ?? '').trim(),
     porta: Number.isInteger(porta) && porta > 0 ? porta : VMIX_DEFAULT_PORT,
     inputSelecionado: config.inputSelecionado
       ? {
@@ -95,9 +106,21 @@ function normalizarConfigFormulario(config: VmixConfig): VmixConfig {
           type: String(config.inputSelecionado.type ?? '').trim()
         }
       : null,
+    inputSelecionadoCoberturas: config.inputSelecionadoCoberturas
+      ? {
+          key: String(config.inputSelecionadoCoberturas.key ?? '').trim(),
+          number: String(config.inputSelecionadoCoberturas.number ?? '').trim(),
+          title: String(config.inputSelecionadoCoberturas.title ?? '').trim(),
+          type: String(config.inputSelecionadoCoberturas.type ?? '').trim()
+        }
+      : null,
     srt: {
       ativo: Boolean(config.srt?.ativo),
-      porta: Number.isInteger(portaSrt) && portaSrt > 0 ? portaSrt : SRT_DEFAULT_PORT
+      porta: Number.isInteger(portaSrt) && portaSrt > 0 ? portaSrt : SRT_DEFAULT_PORT,
+      networkCachingMs:
+        Number.isInteger(networkCachingMs) && networkCachingMs >= 0
+          ? networkCachingMs
+          : SRT_DEFAULT_NETWORK_CACHING_MS
     }
   }
 }
@@ -145,7 +168,8 @@ function restaurarPadroesHostVmix() {
     porta: VMIX_DEFAULT_PORT,
     srt: {
       ...form.value.srt,
-      porta: SRT_DEFAULT_PORT
+      porta: SRT_DEFAULT_PORT,
+      networkCachingMs: SRT_DEFAULT_NETWORK_CACHING_MS
     }
   }
   erro.value = ''
@@ -157,6 +181,14 @@ function selecionarInputVmix(event: Event) {
   form.value = {
     ...form.value,
     inputSelecionado: inputs.value.find((input) => input.key === key) ?? null
+  }
+}
+
+function selecionarInputVmixCoberturas(event: Event) {
+  const key = (event.target as HTMLSelectElement).value
+  form.value = {
+    ...form.value,
+    inputSelecionadoCoberturas: inputs.value.find((input) => input.key === key) ?? null
   }
 }
 
@@ -185,6 +217,13 @@ async function salvar() {
   if (form.value.srt.ativo) {
     if (!Number.isInteger(Number(form.value.srt.porta)) || Number(form.value.srt.porta) <= 0) {
       erro.value = 'Informe uma porta SRT válida'
+      return
+    }
+    if (
+      !Number.isInteger(Number(form.value.srt.networkCachingMs)) ||
+      Number(form.value.srt.networkCachingMs) < 0
+    ) {
+      erro.value = 'Informe um network-caching SRT válido'
       return
     }
   }
@@ -250,14 +289,15 @@ onMounted(() => {
             </label>
             <input
               :value="form.ip"
-              class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800 shadow-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100"
+              class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800 shadow-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100 read-only:cursor-not-allowed read-only:bg-slate-100 read-only:text-slate-500"
               type="text"
               placeholder="Ex.: 192.168.0.50"
+              :readonly="modoOperacao === 'HOST'"
               @input="applyUppercaseInput($event, (value) => (form.ip = value))"
             />
           </div>
 
-          <div class="col-span-12 md:col-span-5">
+          <div v-if="form.ativo" class="col-span-12 md:col-span-5">
             <label class="mb-2 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
               Porta
             </label>
@@ -272,7 +312,7 @@ onMounted(() => {
             />
           </div>
 
-          <div class="col-span-12 md:col-span-5">
+          <div v-if="form.srt.ativo" class="col-span-12 md:col-span-5">
             <label class="mb-2 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
               Porta SRT
             </label>
@@ -287,7 +327,22 @@ onMounted(() => {
             />
           </div>
 
-          <div class="col-span-12">
+          <div v-if="form.srt.ativo" class="col-span-12 md:col-span-7">
+            <label class="mb-2 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+              Network-caching SRT (ms)
+            </label>
+            <input
+              v-model.number="form.srt.networkCachingMs"
+              class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800 shadow-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100"
+              type="number"
+              min="0"
+              max="10000"
+              step="50"
+              placeholder="200"
+            />
+          </div>
+
+          <div v-if="form.ativo" class="col-span-12">
             <div class="flex items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3">
               <div class="text-sm text-slate-600">Buscar inputs disponíveis no vMix configurado.</div>
               <BaseButton :disabled="carregandoInputs || !form.ativo" @click="carregarListaInputs">
@@ -297,15 +352,15 @@ onMounted(() => {
           </div>
 
           <div
-            v-if="erroInputs"
+            v-if="form.ativo && erroInputs"
             class="col-span-12 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700"
           >
             {{ erroInputs }}
           </div>
 
-          <div class="col-span-12">
+          <div v-if="form.ativo" class="col-span-12">
             <label class="mb-2 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
-              Input do vMix
+              Input GC
             </label>
             <div class="relative">
               <select
@@ -323,18 +378,30 @@ onMounted(() => {
             </div>
           </div>
 
-          <div
-            v-if="form.inputSelecionado"
-            class="col-span-12 rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-sm text-emerald-800"
-          >
-            Input salvo: {{ form.inputSelecionado.title || `Input ${form.inputSelecionado.number}` }}
-            (#{{ form.inputSelecionado.number }}) - {{ form.inputSelecionado.type }}
+          <div v-if="form.ativo" class="col-span-12">
+            <label class="mb-2 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+              Input GC Coberturas
+            </label>
+            <div class="relative">
+              <select
+                :value="form.inputSelecionadoCoberturas?.key ?? ''"
+                class="w-full appearance-none rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 pr-10 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
+                :disabled="!form.ativo || carregandoInputs || inputs.length === 0"
+                @change="selecionarInputVmixCoberturas"
+              >
+                <option value="">Selecione um input</option>
+                <option v-for="input in inputs" :key="input.key" :value="input.key">
+                  {{ input.title || `Input ${input.number}` }} | #{{ input.number }} | {{ input.type }}
+                </option>
+              </select>
+              <i class="fas fa-chevron-down pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-xs text-slate-400" />
+            </div>
           </div>
 
           <div class="col-span-12">
             <div class="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
               Padrões do host: IP <strong>127.0.0.1</strong>, vMix <strong>8088</strong> e SRT
-              <strong>9001</strong>. O SRT usa o mesmo IP informado no campo do vMix.
+              <strong>9001</strong>. Network-caching SRT padrão: <strong>200ms</strong>.
             </div>
           </div>
         </div>

@@ -91,8 +91,8 @@ async function carregarJanelaRemota(
 
 function aplicarPreset(win: BrowserWindow, preset: JanelaPreset) {
   if (preset === 'OPERACAO') {
-    win.setMinimumSize(380, 720)
-    win.setSize(550, Math.max(win.getSize()[1], 820), true)
+    win.setMinimumSize(400, 400)
+    win.setSize(500, 600, true)
     centralizarNaTela(win)
     return
   }
