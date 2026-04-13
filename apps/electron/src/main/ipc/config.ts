@@ -203,11 +203,11 @@ function aplicarDefaultsDeModo(
     return {
       modoConfig: {
         ...modoConfig,
-        hostIp: HOST_DEFAULT_IP
+        hostIp: modoConfig.hostIp || HOST_DEFAULT_IP
       },
       vmix: {
         ...vmix,
-        ip: HOST_DEFAULT_IP
+        ip: vmix.ip || HOST_DEFAULT_IP
       }
     }
   }
@@ -297,7 +297,7 @@ function getBundledExecutable(name: 'ffmpeg.exe') {
 }
 
 function montarEndpointSrt(vmix: VmixConfigIpc) {
-  return `srt://${vmix.ip}:${vmix.srt.porta}?timeout=5000000&network-caching=${vmix.srt.networkCachingMs}`
+  return `srt://${vmix.ip}:${vmix.srt.porta}?timeout=5000000`
 }
 
 async function aguardarInicializacaoPreview(processo: ChildProcess, timeoutMs = 5000): Promise<void> {

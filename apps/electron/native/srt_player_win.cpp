@@ -23,6 +23,7 @@ struct AppState {
   int width = 640;
   int height = 360;
   int volume = 100;
+  int network_caching_ms = 200;
   bool muted = false;
   PROCESS_INFORMATION mpv_process{};
   bool mpv_running = false;
@@ -227,6 +228,7 @@ void play_media(AppState& state, const std::string& url) {
   const auto child_handle = static_cast<std::uint32_t>(reinterpret_cast<UINT_PTR>(state.child) & 0xffffffffu);
   const std::wstring wid = std::to_wstring(child_handle);
   const std::wstring volume = std::to_wstring(state.volume);
+  const std::wstring cache_secs = std::to_wstring(static_cast<double>(state.network_caching_ms) / 1000.0);
   const std::wstring mute = state.muted ? L"yes" : L"no";
   const std::wstring wide_url = utf8_to_wide(url);
   wchar_t mpv_path_buffer[MAX_PATH];
@@ -249,10 +251,10 @@ void play_media(AppState& state, const std::string& url) {
 
   command_line +=
     L"--vo=gpu --gpu-context=d3d11 --force-window=yes --idle=no --keep-open=no --osc=no --osd-level=0 "
-    L"--msg-level=all=no --terminal=no --input-default-bindings=no --input-vo-keyboard=no "
+    L"--msg-level=all=warn --terminal=yes --input-default-bindings=no --input-vo-keyboard=no "
     L"--hwdec=no --profile=sw-fast --profile=low-latency --video-sync=audio --keepaspect=no "
-    L"--audio-display=no --cache=no --cache-pause=no --demuxer-readahead-secs=0.1 "
-    L"--demuxer-max-back-bytes=1MiB --demuxer-max-bytes=4MiB --wid=" + wid;
+    L"--audio-display=no --cache=yes --cache-secs=" + cache_secs + L" --cache-pause=no "
+    L"--demuxer-max-back-bytes=50MiB --demuxer-max-bytes=50MiB --wid=" + wid;
 
   command_line +=
     L" --volume=" + volume +
@@ -383,6 +385,15 @@ void handle_command(AppState& state, const std::string& line) {
     if (value < 0) value = 0;
     if (value > 200) value = 200;
     state.volume = value;
+    return;
+  }
+
+  if (cmd == "CACHE") {
+    int value = 200;
+    iss >> value;
+    if (value < 0) value = 0;
+    if (value > 10000) value = 10000;
+    state.network_caching_ms = value;
     return;
   }
 

@@ -174,10 +174,16 @@ function getLocalIps() {
 
 async function getJsonHostIp() {
   const store = await getStore()
+  const modo = getAppModeOverride() ?? store.get('modo')
   const vmix = store.get('vmix')
   const conexao = store.get('conexaoApp')
   const ipVmix = String(vmix?.ip ?? '').trim()
   const configurado = String(conexao?.hostIp ?? '').trim()
+
+  if (modo === 'HOST') {
+    return configurado || getLocalIps().primary || '127.0.0.1'
+  }
+
   return ipVmix || configurado || getLocalIps().primary || '127.0.0.1'
 }
 

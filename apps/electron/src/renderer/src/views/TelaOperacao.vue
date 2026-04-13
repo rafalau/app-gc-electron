@@ -204,7 +204,7 @@ const srtConfigurado = computed(() => {
 })
 const endpointSrt = computed(() => {
   if (!srtConfigurado.value) return ''
-  return `srt://${srtIp.value}:${formVmix.value.srt.porta}?timeout=5000000&network-caching=${formVmix.value.srt.networkCachingMs ?? 200}`
+  return `srt://${srtIp.value}:${formVmix.value.srt.porta}?timeout=5000000`
 })
 function voltar() {
   router.push(`/leilao/${leilaoId}`)
@@ -652,7 +652,7 @@ function parseValorLance(valor: string) {
 
 function focarCampoLance() {
   void nextTick(() => {
-    inputLanceRef.value?.focus()
+    inputLanceRef.value?.focus({ preventScroll: true })
     inputLanceRef.value?.select()
   })
 }
