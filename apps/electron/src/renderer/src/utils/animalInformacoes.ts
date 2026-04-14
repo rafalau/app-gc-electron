@@ -111,9 +111,12 @@ export function buildInformacoesAgregadas({
     nascimento,
     altura ? `ALTURA: ${altura}` : '',
     peso ? `PESO: ${peso}` : ''
-  ]
-    .map((parte) => String(parte ?? '').trim())
-    .filter(Boolean)
+  ].map((parte) => String(parte ?? '').trim())
+
+  while (partes.length > 0 && !partes[partes.length - 1]) {
+    partes.pop()
+  }
+
   return partes.length > 0 ? partes.join('   |   ') : ''
 }
 

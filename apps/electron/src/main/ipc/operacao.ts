@@ -387,16 +387,16 @@ export async function fetchRemotoJson<T>(url: string, init?: RequestInit): Promi
   return (await response.json()) as T
 }
 
+function normalizarNascimentoTexto(value?: string | null) {
+  const texto = String(value ?? '').trim().toUpperCase()
+  const matchIso = texto.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  if (!matchIso) return texto
+
+  const [, ano, mes, dia] = matchIso
+  return `${dia}/${mes}/${ano}`
+}
+
 function parseInformacoesAgregadas(informacoes: string) {
-  const normalizarNascimentoTexto = (value?: string | null) => {
-    const texto = String(value ?? '').trim().toUpperCase()
-    const matchIso = texto.match(/^(\d{4})-(\d{2})-(\d{2})$/)
-    if (!matchIso) return texto
-
-    const [, ano, mes, dia] = matchIso
-    return `${dia}/${mes}/${ano}`
-  }
-
   const partesBrutas = String(informacoes ?? '')
     .split('|')
     .map((parte) => parte.trim())
@@ -551,9 +551,22 @@ function formatarGenealogiaParaExibicao(genealogia: string) {
     .trim()
 }
 
+function temCamposEstruturadosAnimal(animal: any) {
+  if (!animal) return false
+  return [
+    animal.raca,
+    animal.sexo,
+    animal.pelagem,
+    animal.nascimento,
+    animal.altura,
+    animal.peso
+  ].some((value) => String(value ?? '').trim())
+}
+
 function serializarAnimal(animal: any): AnimalPayload | null {
   if (!animal) return null
   const parsedInformacoes = parseInformacoesAgregadas(animal.informacoes ?? '')
+  const usarInformacoesAgregadas = !temCamposEstruturadosAnimal(animal)
 
   let condicoesCobertura: string[] = []
   try {
@@ -570,9 +583,9 @@ function serializarAnimal(animal: any): AnimalPayload | null {
     raca: animal.raca ?? '',
     sexo: animal.sexo ?? '',
     pelagem: animal.pelagem ?? '',
-    nascimento: animal.nascimento ?? '',
-    altura: animal.altura ?? parsedInformacoes.altura ?? '',
-    peso: animal.peso ?? parsedInformacoes.peso ?? '',
+    nascimento: normalizarNascimentoTexto(animal.nascimento),
+    altura: usarInformacoesAgregadas ? parsedInformacoes.altura : animal.altura ?? '',
+    peso: usarInformacoesAgregadas ? parsedInformacoes.peso : animal.peso ?? '',
     condicoes_cobertura: condicoesCobertura,
     criado_em: animal.criado_em instanceof Date ? animal.criado_em.toISOString() : animal.criado_em,
     atualizado_em:
@@ -622,29 +635,19 @@ async function montarJsonOperacao(leilaoId: string) {
       : null
 
   const animal = serializarAnimal(animalRow)
-  const animaisSelecionados =
-    estado?.animaisSelecionadosIds?.length
-      ? await prisma.animal.findMany({
-          where: {
-            id: {
-              in: estado.animaisSelecionadosIds
-            }
-          },
-          select: {
-            id: true,
-            lote: true,
-            nome: true,
-            ordem: true
-          },
-          orderBy: [{ ordem: 'asc' }, { lote: 'asc' }]
-        })
-      : []
   const condicoes =
     String(animal?.condicoes_pagamento_especificas ?? '').trim() ||
     String(leilao?.condicoes_de_pagamento ?? '').trim()
   const parsed = parseInformacoesAgregadas(animal?.informacoes ?? '')
-  const altura = animal?.altura || parsed.altura || ''
-  const peso = animal?.peso || parsed.peso || ''
+  const usarInformacoesAgregadas = !temCamposEstruturadosAnimal(animalRow)
+  const raca = usarInformacoesAgregadas ? parsed.raca : animal?.raca ?? ''
+  const sexo = usarInformacoesAgregadas ? parsed.sexo : animal?.sexo ?? ''
+  const pelagem = usarInformacoesAgregadas ? parsed.pelagem : animal?.pelagem ?? ''
+  const nascimento = usarInformacoesAgregadas
+    ? parsed.nascimento
+    : normalizarNascimentoTexto(animal?.nascimento)
+  const altura = usarInformacoesAgregadas ? parsed.altura : animal?.altura ?? ''
+  const peso = usarInformacoesAgregadas ? parsed.peso : animal?.peso ?? ''
 
   return [
     {
@@ -654,22 +657,16 @@ async function montarJsonOperacao(leilaoId: string) {
       INFORMACOES: formatarInformacoesParaExibicao(animal?.informacoes ?? ''),
       INFORMACOES_BASICAS: formatarInformacoesBasicasParaExibicao(animal?.informacoes ?? ''),
       ALTURA_PESO: formatarAlturaPesoParaExibicao(altura, peso),
-      RACA: animal?.raca || parsed.raca || '',
-      SEXO: animal?.sexo || parsed.sexo || '',
-      PELAGEM: animal?.pelagem || parsed.pelagem || '',
-      NASCIMENTO: animal?.nascimento || parsed.nascimento || '',
+      RACA: raca,
+      SEXO: sexo,
+      PELAGEM: pelagem,
+      NASCIMENTO: nascimento,
       ALTURA: altura,
       PESO: peso,
       GENEALOGIA: formatarGenealogiaParaExibicao(animal?.genealogia ?? ''),
       VENDEDOR: animal?.vendedor ?? '',
       PACOTES_COBERTURAS:
         animal?.categoria === 'COBERTURAS' ? animal.condicoes_cobertura.join('\n') : '',
-      MODO_SELECAO: estado?.selecaoModo ?? 'SIMPLES',
-      INTERVALO_SEGUNDOS: estado?.intervaloSegundos ?? 10,
-      ANIMAL_ATUAL_INDEX: estado?.animalAtualIndex ?? 0,
-      LOTES_SELECIONADOS: animaisSelecionados.map((item) => item.lote).join(', '),
-      LOTES_SELECIONADOS_IDS: animaisSelecionados.map((item) => item.id).join(','),
-      LOTES_SELECIONADOS_NOMES: animaisSelecionados.map((item) => item.nome).join(' | '),
       LANCE: estado?.lanceAtual ?? '0,00',
       LANCE_DOLAR: estado?.lanceDolar ?? '0,00',
       TOTAL_REAL: estado?.totalReal ?? '0,00',

@@ -95,6 +95,15 @@ function normalizarDataParaApi(value?: string | null) {
   return null
 }
 
+function normalizarDataParaApp(value?: string | null) {
+  const texto = String(value ?? '').trim().toUpperCase()
+  const matchIso = texto.match(/^(\d{4})-(\d{2})-(\d{2})$/)
+  if (!matchIso) return texto
+
+  const [, ano, mes, dia] = matchIso
+  return `${dia}/${mes}/${ano}`
+}
+
 function normalizarDateTimeParaApi(value?: string | null) {
   const texto = String(value ?? '').trim()
   if (!texto) return null
@@ -103,6 +112,13 @@ function normalizarDateTimeParaApi(value?: string | null) {
   if (Number.isNaN(data.getTime())) return null
 
   return data.toISOString()
+}
+
+function timestampMs(value?: string | Date | null) {
+  if (!value) return null
+  const data = value instanceof Date ? value : new Date(value)
+  const ms = data.getTime()
+  return Number.isNaN(ms) ? null : ms
 }
 
 async function atualizarStatusSyncLeilao(
@@ -130,6 +146,22 @@ async function removerStatusSyncLeilao(leilaoId: string) {
   const atual = { ...store.get('gcApiLeiloesSync') }
   delete atual[leilaoId]
   store.set('gcApiLeiloesSync', atual)
+}
+
+async function normalizarNascimentosAnimaisLocais(leilaoId?: string) {
+  const prisma = await getPrisma()
+  const filtroLeilao = leilaoId ? 'AND leilao_id = ?' : ''
+  const params = leilaoId ? [leilaoId] : []
+
+  await prisma.$executeRawUnsafe(
+    `
+      UPDATE Animal
+      SET nascimento = substr(nascimento, 9, 2) || '/' || substr(nascimento, 6, 2) || '/' || substr(nascimento, 1, 4)
+      WHERE nascimento GLOB '[0-9][0-9][0-9][0-9]-[0-9][0-9]-[0-9][0-9]'
+      ${filtroLeilao}
+    `,
+    ...params
+  )
 }
 
 async function fetchGcApiJson<T>(path: string, init?: RequestInit): Promise<T> {
@@ -279,10 +311,20 @@ async function upsertLeilaoRemoto(remote: RemoteAuction) {
 
 async function upsertAnimalRemoto(leilaoId: string, remote: RemoteAnimal) {
   const prisma = await getPrisma()
+  const atualizadoRemoto = remote.updated_at ?? remote.source_updated_at
   const existente = await prisma.animal.findUnique({
     where: { id: remote.external_id },
-    select: { id: true }
+    select: { id: true, atualizado_em: true }
   })
+
+  if (existente) {
+    const localMs = timestampMs(existente.atualizado_em)
+    const remotoMs = timestampMs(atualizadoRemoto)
+
+    if (localMs !== null && remotoMs !== null && localMs > remotoMs) {
+      return 'skipped'
+    }
+  }
 
   await prisma.$executeRawUnsafe(
     `
@@ -310,7 +352,6 @@ async function upsertAnimalRemoto(leilaoId: string, remote: RemoteAnimal) {
         leilao_id = excluded.leilao_id,
         lote = excluded.lote,
         nome = excluded.nome,
-        categoria = excluded.categoria,
         proprietario = excluded.proprietario,
         condicoes_pagamento_especificas = excluded.condicoes_pagamento_especificas,
         raca = excluded.raca,
@@ -333,14 +374,14 @@ async function upsertAnimalRemoto(leilaoId: string, remote: RemoteAnimal) {
     upper(remote.breed),
     upper(remote.sex),
     upper(remote.coat),
-    upper(remote.birth_date),
+    normalizarDataParaApp(remote.birth_date),
     upper(remote.height),
     upper(remote.weight),
     upper(remote.aggregated_info),
     upper(remote.genealogy),
     '[]',
-    remote.updated_at ?? remote.source_updated_at,
-    remote.updated_at ?? remote.source_updated_at
+    atualizadoRemoto,
+    atualizadoRemoto
   )
 
   return existente ? 'updated' : 'created'
@@ -432,6 +473,7 @@ export async function sincronizarGcApiTudo(): Promise<GcApiSyncSummary> {
 
   await pushLeiloesLocais(summary)
   await pullLeiloesRemotos(summary)
+  await normalizarNascimentosAnimaisLocais()
 
   return summary
 }
@@ -456,6 +498,7 @@ export async function sincronizarGcApiLeilao(leilaoId: string): Promise<GcApiSyn
 
   await pushLeilaoLocal(leilao, summary)
   await pullLeiloesRemotos(summary)
+  await normalizarNascimentosAnimaisLocais(leilaoId)
 
   return summary
 }
