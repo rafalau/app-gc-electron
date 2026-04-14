@@ -202,17 +202,7 @@ export function useAnimais(leilaoId: string) {
     return lista.filter((animal) =>
       [
         animal.lote,
-        animal.nome,
-        animal.categoria,
-        animal.vendedor,
-        animal.condicoes_pagamento_especificas,
-        animal.raca,
-        animal.sexo,
-        animal.pelagem,
-        animal.nascimento,
-        animal.informacoes,
-        animal.genealogia,
-        animal.condicoes_cobertura.join(' ')
+        animal.nome
       ]
         .join(' ')
         .toLowerCase()

@@ -312,7 +312,7 @@ onMounted(async () => {
             v-model="busca"
             class="w-full rounded-2xl border border-slate-200 bg-white pl-11 pr-4 py-3 text-sm text-slate-700 shadow-sm outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
             type="text"
-            placeholder="Buscar por lote, nome, raça, informações ou genealogia..."
+            placeholder="Buscar por lote ou nome..."
             @input="applyUppercaseInput($event, (value) => (busca = value))"
           />
         </div>
