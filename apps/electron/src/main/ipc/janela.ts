@@ -71,7 +71,11 @@ async function carregarJanelaConferencia(win: BrowserWindow, leilaoId: string, a
 
 async function carregarJanelaOperacao(
   win: BrowserWindow,
-  windowMode: 'operation-auction-editor' | 'operation-animal-editor' | 'operation-vmix-editor',
+  windowMode:
+    | 'operation-auction-editor'
+    | 'operation-animal-editor'
+    | 'operation-price-panel'
+    | 'operation-vmix-editor',
   queryParams: Record<string, string>
 ) {
   const conexao = await getModoConexaoOperacao()
@@ -257,6 +261,50 @@ export function registrarIpcJanela() {
 
     janelasOperacao.set(chave, win)
     await carregarJanelaOperacao(win, 'operation-animal-editor', queryParams)
+  })
+
+  ipcMain.handle('janela:abrirPainelPrecoOperacao', async (event, leilaoId: string) => {
+    const parent = BrowserWindow.fromWebContents(event.sender)
+    const chave = `price-panel:${leilaoId}`
+    const existente = janelasOperacao.get(chave)
+
+    if (existente && !existente.isDestroyed()) {
+      await carregarJanelaOperacao(existente, 'operation-price-panel', { leilaoId })
+      existente.show()
+      existente.focus()
+      return
+    }
+
+    const win = new BrowserWindow({
+      width: 1920,
+      height: 1080,
+      minWidth: 960,
+      minHeight: 540,
+      show: false,
+      autoHideMenuBar: false,
+      backgroundColor: '#07111f',
+      webPreferences: {
+        preload: getPreloadPath(),
+        sandbox: false
+      }
+    })
+
+    win.on('ready-to-show', () => {
+      ajustarTamanhoAoDisplay(
+        win,
+        { width: 1920, height: 1080 },
+        { width: 960, height: 540 }
+      )
+      centralizarNaTela(win, parent)
+      win.show()
+    })
+
+    win.on('closed', () => {
+      janelasOperacao.delete(chave)
+    })
+
+    janelasOperacao.set(chave, win)
+    await carregarJanelaOperacao(win, 'operation-price-panel', { leilaoId })
   })
 
   ipcMain.handle('janela:abrirConfiguracaoVmixOperacao', async (event, leilaoId: string) => {

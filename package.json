@@ -1,6 +1,6 @@
 {
   "name": "app-gc-electron",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "APP GC Vmix para operação de leilões com integração vMix",
   "private": true,
   "main": "index.js",

@@ -61,7 +61,7 @@ EOF
 
 cat > "$PACKAGE_DIR/$DESKTOP_NAME" <<EOF
 [Desktop Entry]
-Version=1.0
+Version=1.1
 Type=Application
 Name=$PRODUCT_NAME
 Comment=$COMMENT

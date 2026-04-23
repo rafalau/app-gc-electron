@@ -273,6 +273,8 @@ const janelaApi = {
     ipcRenderer.invoke('janela:abrirEditorLeilaoOperacao', leilaoId),
   abrirEditorAnimalOperacao: (leilaoId: string, animalId?: string) =>
     ipcRenderer.invoke('janela:abrirEditorAnimalOperacao', leilaoId, animalId),
+  abrirPainelPrecoOperacao: (leilaoId: string) =>
+    ipcRenderer.invoke('janela:abrirPainelPrecoOperacao', leilaoId),
   abrirConfiguracaoVmixOperacao: (leilaoId: string) =>
     ipcRenderer.invoke('janela:abrirConfiguracaoVmixOperacao', leilaoId),
   abrirEditorLeilaoRemoto: (leilaoId: string) =>

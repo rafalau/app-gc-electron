@@ -291,6 +291,7 @@ declare global {
       abrirEdicaoRapida: (leilaoId: string, animalId?: string) => Promise<void>
       abrirEditorLeilaoOperacao: (leilaoId: string) => Promise<void>
       abrirEditorAnimalOperacao: (leilaoId: string, animalId?: string) => Promise<void>
+      abrirPainelPrecoOperacao: (leilaoId: string) => Promise<void>
       abrirConfiguracaoVmixOperacao: (leilaoId: string) => Promise<void>
       abrirEditorLeilaoRemoto: (leilaoId: string) => Promise<void>
       abrirEditorAnimalRemoto: (leilaoId: string, animalId: string) => Promise<void>

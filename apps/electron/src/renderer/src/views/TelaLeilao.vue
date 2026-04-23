@@ -120,6 +120,13 @@ const gerenciarItems = computed(() => {
       action: () => {
         void abrirModoConferencia()
       }
+    },
+    {
+      label: 'Painel de Preço',
+      icon: 'fa-money-bill-wave',
+      action: () => {
+        void abrirPainelPreco()
+      }
     }
   ]
 
@@ -230,6 +237,10 @@ function abrirModoOperacao(animal?: Animal) {
 
 async function abrirModoConferencia(animal?: Animal) {
   await window.janela.abrirEdicaoRapida(leilaoId, animal?.id)
+}
+
+async function abrirPainelPreco() {
+  await window.janela.abrirPainelPrecoOperacao(leilaoId)
 }
 
 function abrirEdicaoAnimal(animal: Animal) {
