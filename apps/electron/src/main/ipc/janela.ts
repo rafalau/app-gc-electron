@@ -23,6 +23,30 @@ function centralizarNaTela(win: BrowserWindow, parent?: BrowserWindow | null) {
   win.setPosition(x, y)
 }
 
+function ajustarTamanhoAoDisplay(
+  win: BrowserWindow,
+  alvo: { width: number; height: number },
+  minimo: { width: number; height: number }
+) {
+  const bounds = win.getBounds()
+  const pontoReferencia = {
+    x: Math.round(bounds.x + bounds.width / 2),
+    y: Math.round(bounds.y + bounds.height / 2)
+  }
+  const display = screen.getDisplayNearestPoint(pontoReferencia)
+  const area = display.workArea
+  const margem = 32
+  const larguraDisponivel = Math.max(minimo.width, area.width - margem)
+  const alturaDisponivel = Math.max(minimo.height, area.height - margem)
+
+  win.setMinimumSize(minimo.width, minimo.height)
+  win.setSize(
+    Math.min(alvo.width, larguraDisponivel),
+    Math.min(alvo.height, alturaDisponivel),
+    true
+  )
+}
+
 async function carregarJanelaConferencia(win: BrowserWindow, leilaoId: string, animalId?: string) {
   const conexao = await getModoConexaoOperacao()
   const query = new URLSearchParams({
@@ -91,14 +115,20 @@ async function carregarJanelaRemota(
 
 function aplicarPreset(win: BrowserWindow, preset: JanelaPreset) {
   if (preset === 'OPERACAO') {
-    win.setMinimumSize(400, 400)
-    win.setSize(500, 600, true)
+    ajustarTamanhoAoDisplay(
+      win,
+      { width: 500, height: 720 },
+      { width: 400, height: 400 }
+    )
     centralizarNaTela(win)
     return
   }
 
-  win.setMinimumSize(1100, 720)
-  win.setSize(1100, 720, true)
+  ajustarTamanhoAoDisplay(
+    win,
+    { width: 1100, height: 720 },
+    { width: 1100, height: 720 }
+  )
   centralizarNaTela(win)
 }
 
@@ -189,13 +219,15 @@ export function registrarIpcJanela() {
     await carregarJanelaOperacao(win, 'operation-auction-editor', { leilaoId })
   })
 
-  ipcMain.handle('janela:abrirEditorAnimalOperacao', async (event, leilaoId: string, animalId: string) => {
+  ipcMain.handle('janela:abrirEditorAnimalOperacao', async (event, leilaoId: string, animalId?: string) => {
     const parent = BrowserWindow.fromWebContents(event.sender)
     const chave = `animal:${leilaoId}`
     const existente = janelasOperacao.get(chave)
+    const queryParams: Record<string, string> = { leilaoId }
+    if (animalId) queryParams.animalId = animalId
 
     if (existente && !existente.isDestroyed()) {
-      await carregarJanelaOperacao(existente, 'operation-animal-editor', { leilaoId, animalId })
+      await carregarJanelaOperacao(existente, 'operation-animal-editor', queryParams)
       existente.show()
       existente.focus()
       return
@@ -224,7 +256,7 @@ export function registrarIpcJanela() {
     })
 
     janelasOperacao.set(chave, win)
-    await carregarJanelaOperacao(win, 'operation-animal-editor', { leilaoId, animalId })
+    await carregarJanelaOperacao(win, 'operation-animal-editor', queryParams)
   })
 
   ipcMain.handle('janela:abrirConfiguracaoVmixOperacao', async (event, leilaoId: string) => {

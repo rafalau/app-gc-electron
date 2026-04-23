@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { reactive, ref, watch, onMounted } from 'vue'
 import BaseButton from '@renderer/components/ui/BaseButton.vue'
+import BaseToast from '@renderer/components/ui/BaseToast.vue'
 import { CATEGORIAS_ANIMAL, type AnimalCriarPayload } from '@renderer/types/animal'
 import type { LayoutInformacoesAnimais } from '@renderer/composables/useAnimais'
 import type { AssociationProvider, StudbookSearchResult } from '@renderer/types/importacao'
@@ -14,12 +15,14 @@ const searchParams = new URLSearchParams(window.location.search)
 const leilaoId = searchParams.get('leilaoId') ?? ''
 const animalId = searchParams.get('animalId') ?? ''
 const baseUrl = searchParams.get('baseUrl') ?? ''
+const criandoNovoAnimal = !animalId
 
 const carregando = ref(true)
 const salvando = ref(false)
 const erro = ref('')
 const titulo = ref('Editar Animal')
 const layoutModo = ref<LayoutInformacoesAnimais>('SEPARADAS')
+const toastRef = ref<InstanceType<typeof BaseToast> | null>(null)
 const form = ref<AnimalCriarPayload>({
   leilao_id: leilaoId,
   lote: '',
@@ -91,6 +94,19 @@ async function fetchJson<T>(path: string, init?: RequestInit): Promise<T> {
     throw new Error(body || `Falha HTTP ${response.status}`)
   }
   return response.json() as Promise<T>
+}
+
+function showToast(
+  message: string,
+  type: 'success' | 'error' | 'warning' | 'info' = 'info',
+  duration = 4000
+) {
+  toastRef.value?.addToast(message, type, duration)
+}
+
+function setErro(message: string) {
+  erro.value = message
+  showToast(message, 'error', 5000)
 }
 
 async function buscarStudbookOperacao(
@@ -165,20 +181,43 @@ async function carregar() {
   erro.value = ''
 
   try {
-    const [leilao, animais] = await Promise.all([
-      fetchJson<any>(`/sync/leiloes/${encodeURIComponent(leilaoId)}`),
-      fetchJson<any[]>(`/sync/animais/${encodeURIComponent(leilaoId)}`)
-    ])
+    const leilao = await fetchJson<any>(`/sync/leiloes/${encodeURIComponent(leilaoId)}`)
+    titulo.value = leilao?.titulo_evento
+      ? `${criandoNovoAnimal ? 'Novo Animal' : 'Editar Animal'} - ${leilao.titulo_evento}`
+      : criandoNovoAnimal
+        ? 'Novo Animal'
+        : 'Editar Animal'
+    document.title = titulo.value
+    layoutModo.value = 'SEPARADAS'
 
-    const animal = animais.find((item) => item.id === animalId)
-    if (!animal) {
-      erro.value = 'Animal não encontrado.'
+    if (criandoNovoAnimal) {
+      form.value = {
+        leilao_id: leilaoId,
+        lote: '',
+        nome: '',
+        categoria: CATEGORIAS_ANIMAL[0],
+        vendedor: '',
+        condicoes_pagamento_especificas: '',
+        raca: '',
+        sexo: '',
+        pelagem: '',
+        nascimento: '',
+        altura: '',
+        peso: '',
+        informacoes: '',
+        genealogia: '',
+        condicoes_cobertura: []
+      }
       return
     }
 
-    titulo.value = leilao?.titulo_evento ? `Editar Animal - ${leilao.titulo_evento}` : 'Editar Animal'
-    document.title = titulo.value
-    layoutModo.value = 'SEPARADAS'
+    const animais = await fetchJson<any[]>(`/sync/animais/${encodeURIComponent(leilaoId)}`)
+    const animal = animais.find((item) => item.id === animalId)
+    if (!animal) {
+      setErro('Animal não encontrado.')
+      return
+    }
+
     form.value = {
       leilao_id: animal.leilao_id,
       lote: animal.lote,
@@ -197,7 +236,7 @@ async function carregar() {
       condicoes_cobertura: [...animal.condicoes_cobertura]
     }
   } catch (errorAtual) {
-    erro.value = (errorAtual as Error).message
+    setErro((errorAtual as Error).message)
   } finally {
     carregando.value = false
   }
@@ -282,32 +321,37 @@ async function salvar() {
   }
 
   if (!payload.lote.trim()) {
-    erro.value = 'Informe o lote do animal'
+    setErro('Informe o lote do animal')
     return
   }
 
   const erroLote = validarLote(payload.lote)
   if (erroLote) {
-    erro.value = erroLote
+    setErro(erroLote)
     return
   }
 
   if (!payload.nome.trim()) {
-    erro.value = 'Informe o nome do animal'
+    setErro('Informe o nome do animal')
     return
   }
 
   if (payload.categoria === 'COBERTURAS' && payload.condicoes_cobertura.length === 0) {
-    erro.value = 'Adicione ao menos uma condição para coberturas'
+    setErro('Adicione ao menos uma condição para coberturas')
     return
   }
 
   salvando.value = true
   try {
-    await fetchJson(`/sync/animal/${encodeURIComponent(animalId)}`, {
-      method: 'PUT',
+    const requestPath = criandoNovoAnimal
+      ? `/sync/animais/${encodeURIComponent(leilaoId)}`
+      : `/sync/animal/${encodeURIComponent(animalId)}`
+
+    await fetchJson(requestPath, {
+      method: criandoNovoAnimal ? 'POST' : 'PUT',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
+        leilao_id: payload.leilao_id,
         lote: payload.lote,
         nome: payload.nome,
         categoria: payload.categoria,
@@ -324,9 +368,10 @@ async function salvar() {
         condicoes_cobertura: payload.condicoes_cobertura
       })
     })
+    showToast(criandoNovoAnimal ? 'Animal criado com sucesso.' : 'Animal salvo com sucesso.', 'success', 2500)
     fecharJanela()
   } catch (errorAtual) {
-    erro.value = (errorAtual as Error).message
+    setErro((errorAtual as Error).message)
   } finally {
     salvando.value = false
   }
@@ -339,9 +384,10 @@ onMounted(() => {
 
 <template>
   <div class="min-h-screen bg-slate-100 p-4">
+    <BaseToast ref="toastRef" />
     <div class="mx-auto w-full max-w-3xl rounded-3xl border border-slate-200 bg-white shadow-sm">
       <div class="border-b border-slate-200 bg-gradient-to-r from-blue-600 to-blue-700 px-6 py-5 text-white">
-        <div class="text-lg font-bold">Editar Animal</div>
+        <div class="text-lg font-bold">{{ criandoNovoAnimal ? 'Novo Animal' : 'Editar Animal' }}</div>
         <div v-if="titulo" class="mt-1 text-sm text-blue-100">{{ titulo }}</div>
       </div>
 
@@ -349,13 +395,6 @@ onMounted(() => {
         <div v-if="carregando" class="text-sm text-slate-500">Carregando...</div>
 
         <div v-else>
-          <div
-            v-if="erro"
-            class="mb-4 rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-700"
-          >
-            {{ erro }}
-          </div>
-
           <div class="mb-5 rounded-2xl border border-slate-200 bg-slate-50 p-4">
             <div class="flex flex-wrap items-center justify-between gap-3">
               <div>
@@ -640,7 +679,7 @@ onMounted(() => {
       <div class="flex justify-end gap-3 border-t border-slate-200 bg-slate-50 px-6 py-4">
         <BaseButton :disabled="salvando" @click="fecharJanela">Cancelar</BaseButton>
         <BaseButton variante="primario" :disabled="carregando || salvando" @click="salvar">
-          {{ salvando ? 'Salvando...' : 'Salvar Alterações' }}
+          {{ salvando ? 'Salvando...' : criandoNovoAnimal ? 'Criar Animal' : 'Salvar Alterações' }}
         </BaseButton>
       </div>
     </div>

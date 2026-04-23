@@ -1,8 +1,14 @@
 <script setup lang="ts">
 import { computed, nextTick, onMounted, onUnmounted, ref } from 'vue'
+import AnimalModal from '@renderer/components/animal/AnimalModal.vue'
 import BaseButton from '@renderer/components/ui/BaseButton.vue'
 import BaseToast from '@renderer/components/ui/BaseToast.vue'
-import { type Animal, type AnimalAtualizacaoEmLotePayload } from '@renderer/types/animal'
+import {
+  CATEGORIAS_ANIMAL,
+  type Animal,
+  type AnimalAtualizacaoEmLotePayload,
+  type AnimalCriarPayload
+} from '@renderer/types/animal'
 import {
   buildInformacoesAgregadas,
   formatarInformacoesParaExibicao,
@@ -31,6 +37,24 @@ const erro = ref('')
 const linhas = ref<LinhaEdicaoRapida[]>([])
 const snapshotsPorId = ref<Record<string, string>>({})
 const toastRef = ref<InstanceType<typeof BaseToast> | null>(null)
+const modalNovoAnimalAberto = ref(false)
+const formNovoAnimal = ref<AnimalCriarPayload>({
+  leilao_id: leilaoId,
+  lote: '',
+  nome: '',
+  categoria: CATEGORIAS_ANIMAL[0],
+  vendedor: '',
+  condicoes_pagamento_especificas: '',
+  raca: '',
+  sexo: '',
+  pelagem: '',
+  nascimento: '',
+  altura: '',
+  peso: '',
+  informacoes: '',
+  genealogia: '',
+  condicoes_cobertura: []
+})
 let eventSource: EventSource | null = null
 let pollingSyncId: number | null = null
 let ignorarConflitosAte = 0
@@ -111,6 +135,26 @@ function normalizarCondicoesTexto(value: string) {
     .split(/\n|;/)
     .map((item) => normalizarTexto(item).trim())
     .filter(Boolean)
+}
+
+function criarFormNovoAnimal(): AnimalCriarPayload {
+  return {
+    leilao_id: leilaoId,
+    lote: '',
+    nome: '',
+    categoria: CATEGORIAS_ANIMAL[0],
+    vendedor: '',
+    condicoes_pagamento_especificas: '',
+    raca: '',
+    sexo: '',
+    pelagem: '',
+    nascimento: '',
+    altura: '',
+    peso: '',
+    informacoes: '',
+    genealogia: '',
+    condicoes_cobertura: []
+  }
 }
 
 function serializarAnimal(animal: Animal) {
@@ -342,23 +386,27 @@ async function salvarTudo() {
   for (const linha of alteradas) {
     if (!linha.lote.trim()) {
       erro.value = `Lote obrigatório no animal ${linha.nome || linha.id}.`
+      showToast(erro.value, 'error', 5000)
       return
     }
 
     const erroLote = validarLote(linha.lote)
     if (erroLote) {
       erro.value = `${erroLote} no animal ${linha.nome || linha.id}.`
+      showToast(erro.value, 'error', 5000)
       return
     }
 
     if (!linha.nome.trim()) {
       erro.value = `Nome obrigatório no lote ${linha.lote}.`
+      showToast(erro.value, 'error', 5000)
       return
     }
 
     const condicoes = normalizarCondicoesTexto(linha.condicoesTexto)
     if (linha.categoria === 'COBERTURAS' && condicoes.length === 0) {
       erro.value = `Adicione ao menos uma condição para o lote ${linha.lote}.`
+      showToast(erro.value, 'error', 5000)
       return
     }
 
@@ -413,6 +461,61 @@ function fecharJanela() {
   window.close()
 }
 
+function abrirNovoAnimal() {
+  formNovoAnimal.value = criarFormNovoAnimal()
+  modalNovoAnimalAberto.value = true
+}
+
+function fecharModalNovoAnimal() {
+  modalNovoAnimalAberto.value = false
+}
+
+async function salvarNovoAnimal(payload: AnimalCriarPayload) {
+  const payloadNormalizado: AnimalCriarPayload = {
+    ...payload,
+    leilao_id: leilaoId,
+    condicoes_cobertura: [...payload.condicoes_cobertura]
+  }
+
+  if (!payloadNormalizado.lote.trim()) {
+    showToast('Informe o lote do animal', 'error', 5000)
+    return
+  }
+
+  const erroLote = validarLote(payloadNormalizado.lote)
+  if (erroLote) {
+    showToast(erroLote, 'error', 5000)
+    return
+  }
+
+  if (!payloadNormalizado.nome.trim()) {
+    showToast('Informe o nome do animal', 'error', 5000)
+    return
+  }
+
+  if (
+    payloadNormalizado.categoria === 'COBERTURAS' &&
+    payloadNormalizado.condicoes_cobertura.length === 0
+  ) {
+    showToast('Adicione ao menos uma condição para coberturas', 'error', 5000)
+    return
+  }
+
+  try {
+    await fetchJson<Animal>(`/sync/animais/${encodeURIComponent(leilaoId)}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payloadNormalizado)
+    })
+    await carregarDados()
+    fecharModalNovoAnimal()
+    showToast('Animal criado com sucesso.', 'success', 3500)
+  } catch (errorAtual) {
+    const message = (errorAtual as Error).message
+    showToast(message, 'error', 5000)
+  }
+}
+
 onMounted(async () => {
   await carregarDados()
   await iniciarSync()
@@ -433,6 +536,15 @@ onUnmounted(() => {
 <template>
   <div class="min-h-screen bg-slate-800 text-slate-900">
     <BaseToast ref="toastRef" />
+    <AnimalModal
+      :aberto="modalNovoAnimalAberto"
+      modo="CRIAR"
+      :layout-modo="layoutModo"
+      :form="formNovoAnimal"
+      erro=""
+      @fechar="fecharModalNovoAnimal"
+      @salvar="salvarNovoAnimal"
+    />
     <div class="sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur">
       <div class="flex flex-col gap-4 px-5 py-4 lg:px-7">
         <div class="flex flex-wrap items-start justify-between gap-3">
@@ -458,6 +570,7 @@ onUnmounted(() => {
           </div>
 
           <div class="flex flex-wrap gap-2">
+            <BaseButton variante="primario" @click="abrirNovoAnimal">Novo animal</BaseButton>
             <BaseButton variante="secundario" @click="fecharJanela">Fechar</BaseButton>
             <BaseButton variante="sucesso" :disabled="salvando || totalSujo === 0" @click="salvarTudo">
               {{ salvando ? 'Salvando...' : 'Salvar alterações' }}

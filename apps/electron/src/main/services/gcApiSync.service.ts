@@ -31,6 +31,7 @@ type RemoteAnimal = {
   external_id: string
   lot: string
   name: string
+  category?: string | null
   breed?: string | null
   sex?: string | null
   coat?: string | null
@@ -41,6 +42,10 @@ type RemoteAnimal = {
   aggregated_info?: string | null
   genealogy?: string | null
   payment_terms_specific?: string | null
+  metadata?: {
+    category?: string | null
+    condicoes_cobertura?: string[] | null
+  } | null
   source_updated_at: string
   deleted_at?: string | null
   updated_at?: string | null
@@ -112,6 +117,15 @@ function normalizarDateTimeParaApi(value?: string | null) {
   if (Number.isNaN(data.getTime())) return null
 
   return data.toISOString()
+}
+
+function normalizarCategoriaAnimal(value?: string | null) {
+  const categoria = upper(value)
+  return categoria === 'COBERTURAS' ? 'COBERTURAS' : 'ANIMAIS'
+}
+
+function normalizarCondicoesCobertura(values?: string[] | null) {
+  return Array.isArray(values) ? values.map((item) => upper(item)).filter(Boolean) : []
 }
 
 function timestampMs(value?: string | Date | null) {
@@ -242,6 +256,7 @@ async function pushLeilaoLocal(
           external_id: animal.id,
           lot: normalizarTextoOpcional(animal.lote) ?? '',
           name: normalizarTextoOpcional(animal.nome) ?? '',
+          category: normalizarTextoOpcional(animal.categoria),
           breed: normalizarTextoOpcional(animal.raca),
           sex: normalizarTextoOpcional(animal.sexo),
           coat: normalizarTextoOpcional(animal.pelagem),
@@ -253,7 +268,11 @@ async function pushLeilaoLocal(
           genealogy: normalizarTextoOpcional(animal.genealogia),
           payment_terms_specific: normalizarTextoOpcional(animal.condicoes_pagamento_especificas),
           order_index: 0,
-          source_updated_at: normalizarDateTimeParaApi(animal.atualizado_em) ?? new Date().toISOString()
+          source_updated_at: normalizarDateTimeParaApi(animal.atualizado_em) ?? new Date().toISOString(),
+          metadata: {
+            category: normalizarCategoriaAnimal(animal.categoria),
+            condicoes_cobertura: normalizarCondicoesCobertura(animal.condicoes_cobertura)
+          }
         }))
       })
     })
@@ -312,6 +331,8 @@ async function upsertLeilaoRemoto(remote: RemoteAuction) {
 async function upsertAnimalRemoto(leilaoId: string, remote: RemoteAnimal) {
   const prisma = await getPrisma()
   const atualizadoRemoto = remote.updated_at ?? remote.source_updated_at
+  const categoria = normalizarCategoriaAnimal(remote.category ?? remote.metadata?.category)
+  const condicoesCobertura = normalizarCondicoesCobertura(remote.metadata?.condicoes_cobertura)
   const existente = await prisma.animal.findUnique({
     where: { id: remote.external_id },
     select: { id: true, atualizado_em: true }
@@ -352,6 +373,7 @@ async function upsertAnimalRemoto(leilaoId: string, remote: RemoteAnimal) {
         leilao_id = excluded.leilao_id,
         lote = excluded.lote,
         nome = excluded.nome,
+        categoria = excluded.categoria,
         proprietario = excluded.proprietario,
         condicoes_pagamento_especificas = excluded.condicoes_pagamento_especificas,
         raca = excluded.raca,
@@ -362,13 +384,14 @@ async function upsertAnimalRemoto(leilaoId: string, remote: RemoteAnimal) {
         peso = excluded.peso,
         informacoes = excluded.informacoes,
         genealogia = excluded.genealogia,
+        condicoes_cobertura = excluded.condicoes_cobertura,
         atualizado_em = excluded.atualizado_em
     `,
     remote.external_id,
     leilaoId,
     upper(remote.lot),
     upper(remote.name),
-    'ANIMAIS',
+    categoria,
     upper(remote.seller),
     upper(remote.payment_terms_specific),
     upper(remote.breed),
@@ -379,7 +402,7 @@ async function upsertAnimalRemoto(leilaoId: string, remote: RemoteAnimal) {
     upper(remote.weight),
     upper(remote.aggregated_info),
     upper(remote.genealogy),
-    '[]',
+    JSON.stringify(condicoesCobertura),
     atualizadoRemoto,
     atualizadoRemoto
   )

@@ -56,7 +56,7 @@ defineExpose({
 </script>
 
 <template>
-  <div class="fixed top-4 right-4 z-40 space-y-2">
+  <div class="fixed top-4 right-4 z-[70] space-y-2">
     <transition-group name="toast" tag="div">
       <div
         v-for="toast in showToasts"
