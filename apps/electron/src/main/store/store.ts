@@ -30,6 +30,18 @@ type StoreSchema = {
       title: string
       type: string
     } | null
+    inputLista: {
+      key: string
+      number: string
+      title: string
+      type: string
+    } | null
+    itemListaSelecionado: {
+      index: number
+      title: string
+      value: string
+      selected: boolean
+    } | null
     srt: {
       ativo: boolean
       porta: number | null
@@ -114,6 +126,8 @@ export async function getStore() {
         porta: VMIX_DEFAULT_PORT,
         inputSelecionado: null,
         inputSelecionadoCoberturas: null,
+        inputLista: null,
+        itemListaSelecionado: null,
         srt: {
           ativo: false,
           porta: SRT_DEFAULT_PORT,

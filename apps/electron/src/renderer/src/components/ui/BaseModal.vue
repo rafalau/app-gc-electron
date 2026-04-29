@@ -21,12 +21,12 @@ const emit = defineEmits<{
         <Transition name="modal-panel" appear>
           <div
             v-if="aberto"
-            class="w-full max-w-2xl overflow-hidden rounded-xl border border-gray-200 bg-white shadow-2xl"
+            class="w-full max-w-2xl overflow-hidden rounded-xl border border-gray-200 bg-white shadow-2xl dark:border-slate-700 dark:bg-slate-900"
           >
             <!-- Cabeçalho -->
             <div
               :class="[
-                'flex items-center justify-between px-6 py-5 border-b border-gray-200 text-white',
+                'flex items-center justify-between px-6 py-5 border-b border-gray-200 text-white dark:border-slate-700',
                 'bg-gradient-to-r from-blue-600 to-blue-700'
               ]"
             >
@@ -40,12 +40,12 @@ const emit = defineEmits<{
             </div>
 
             <!-- Conteúdo -->
-            <div class="px-6 py-6 max-h-[calc(100vh-200px)] overflow-y-auto">
+            <div class="max-h-[calc(100vh-200px)] overflow-y-auto px-6 py-6 dark:text-slate-100">
               <slot />
             </div>
 
             <!-- Rodapé -->
-            <div class="px-6 py-4 border-t border-gray-200 bg-gray-50 flex justify-end gap-3">
+            <div class="flex justify-end gap-3 border-t border-gray-200 bg-gray-50 px-6 py-4 dark:border-slate-700 dark:bg-slate-950">
               <slot name="footer" />
             </div>
           </div>

@@ -4,6 +4,8 @@ export type VmixConfig = {
   porta: number
   inputSelecionado: VmixInput | null
   inputSelecionadoCoberturas: VmixInput | null
+  inputLista: VmixInput | null
+  itemListaSelecionado: VmixListItem | null
   srt: SrtConfig
 }
 
@@ -12,6 +14,18 @@ export type VmixInput = {
   title: string
   type: string
   key: string
+}
+
+export type VmixListItem = {
+  index: number
+  title: string
+  value: string
+  selected: boolean
+}
+
+export type VmixListState = {
+  items: VmixListItem[]
+  autoPlayNext: boolean | null
 }
 
 export type SrtConfig = {

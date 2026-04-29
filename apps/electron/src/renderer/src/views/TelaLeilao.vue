@@ -267,24 +267,24 @@ onMounted(async () => {
               ← Voltar
             </button>
 
-            <h1 class="min-w-0 text-2xl font-bold text-gray-900" :title="tituloPagina">
+            <h1 class="min-w-0 text-2xl font-bold text-gray-900 dark:text-slate-100" :title="tituloPagina">
               {{ tituloPaginaCurto }}
             </h1>
           </div>
 
           <div v-if="leilao" class="flex flex-wrap gap-2">
             <span
-              class="inline-flex items-center px-3 py-1 rounded-full bg-white border border-blue-200 text-sm font-medium text-blue-800"
+              class="inline-flex items-center rounded-full border border-blue-200 bg-blue-50 px-3 py-1 text-sm font-medium text-blue-800 dark:border-blue-800 dark:bg-blue-950 dark:text-blue-200"
             >
               {{ formatarDataBR(leilao.data) }}
             </span>
             <span
-              class="inline-flex items-center px-3 py-1 rounded-full bg-white border border-green-200 text-sm font-medium text-green-700"
+              class="inline-flex items-center rounded-full border border-green-200 bg-green-50 px-3 py-1 text-sm font-medium text-green-700 dark:border-green-800 dark:bg-green-950 dark:text-green-200"
             >
               {{ leilao.total_animais }} animal(is)
             </span>
             <span
-              class="inline-flex items-center px-3 py-1 rounded-full bg-white border border-gray-200 text-sm font-medium text-gray-700"
+              class="inline-flex items-center rounded-full border border-gray-200 bg-slate-50 px-3 py-1 text-sm font-medium text-gray-700 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200"
             >
               Multi.: {{ leilao.multiplicador }}
             </span>
@@ -321,7 +321,7 @@ onMounted(async () => {
           />
           <input
             v-model="busca"
-            class="w-full rounded-2xl border border-slate-200 bg-white pl-11 pr-4 py-3 text-sm text-slate-700 shadow-sm outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100"
+            class="w-full rounded-2xl border border-slate-200 bg-white py-3 pl-11 pr-4 text-sm text-slate-700 shadow-sm outline-none transition focus:border-blue-400 focus:ring-4 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:ring-blue-950"
             type="text"
             placeholder="Buscar por lote ou nome..."
             @input="applyUppercaseInput($event, (value) => (busca = value))"
@@ -332,14 +332,14 @@ onMounted(async () => {
 
     <div
       v-if="carregando"
-      class="border rounded-2xl p-10 bg-white text-center text-gray-500 shadow-sm"
+      class="rounded-2xl border bg-white p-10 text-center text-gray-500 shadow-sm dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400"
     >
       Carregando animais...
     </div>
 
     <div
       v-else-if="!leilao"
-      class="border rounded-2xl p-10 bg-white text-center text-gray-500 shadow-sm"
+      class="rounded-2xl border bg-white p-10 text-center text-gray-500 shadow-sm dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400"
     >
       Leilão não encontrado.
     </div>
@@ -382,11 +382,11 @@ onMounted(async () => {
 
     <BaseModal :aberto="configuracoesAbertas" titulo="Configurações de API" @fechar="fecharConfiguracoes">
       <div class="space-y-5">
-        <div class="rounded-2xl border border-slate-200 bg-slate-50 p-4">
+        <div class="rounded-2xl border border-slate-200 bg-slate-50 p-4 dark:border-slate-800 dark:bg-slate-900">
           <div class="flex items-center justify-between gap-4">
             <div>
-              <div class="text-sm font-semibold text-slate-900">Configurações de APIs</div>
-              <div class="mt-1 text-[11px] leading-4 text-slate-500">
+              <div class="text-sm font-semibold text-slate-900 dark:text-slate-100">Configurações de APIs</div>
+              <div class="mt-1 text-[11px] leading-4 text-slate-500 dark:text-slate-400">
                 Cadastre e ordene as APIs do menu <span class="font-semibold">Importar API</span>.
               </div>
             </div>
@@ -401,7 +401,7 @@ onMounted(async () => {
             <div
               v-for="(provider, index) in apiProvidersDraft"
               :key="provider.id"
-              class="rounded-2xl border border-slate-200 bg-white p-4"
+              class="rounded-2xl border border-slate-200 bg-white p-4 dark:border-slate-700 dark:bg-slate-950"
             >
               <div class="grid gap-3 md:grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)_auto]">
                 <div>
@@ -411,7 +411,7 @@ onMounted(async () => {
                   <input
                     :value="provider.nome"
                     type="text"
-                    class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100"
+                    class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:focus:bg-slate-950 dark:focus:ring-blue-950"
                     @input="
                       atualizarApiProvider(
                         index,
@@ -429,7 +429,7 @@ onMounted(async () => {
                   <input
                     :value="provider.url"
                     type="text"
-                    class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100"
+                    class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700 outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:focus:bg-slate-950 dark:focus:ring-blue-950"
                     @input="
                       atualizarApiProvider(
                         index,
@@ -464,7 +464,7 @@ onMounted(async () => {
 
             <div
               v-if="apiProvidersDraft.length === 0"
-              class="rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-6 text-sm text-slate-500"
+              class="rounded-2xl border border-dashed border-slate-300 bg-white px-4 py-6 text-sm text-slate-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-400"
             >
               Nenhuma API cadastrada.
             </div>

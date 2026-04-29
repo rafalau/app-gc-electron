@@ -2,6 +2,9 @@ import './assets/main.css'
 import '@fortawesome/fontawesome-free/css/all.css'
 
 import { createApp } from 'vue'
+import { inicializarTema } from './composables/useTheme'
+
+inicializarTema()
 
 function renderBootstrapError(error: unknown) {
   const target = document.getElementById('app')

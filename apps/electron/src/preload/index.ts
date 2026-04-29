@@ -147,6 +147,19 @@ type GcApiSyncSummaryPayload = {
   serverTime: string | null
 }
 
+type VmixInputPayload = { key: string; number: string; title: string; type: string }
+type VmixListItemPayload = { index: number; title: string; value: string; selected: boolean }
+type VmixPayload = {
+  ativo: boolean
+  ip: string
+  porta: number
+  inputSelecionado: VmixInputPayload | null
+  inputSelecionadoCoberturas?: VmixInputPayload | null
+  inputLista?: VmixInputPayload | null
+  itemListaSelecionado?: VmixListItemPayload | null
+  srt: { ativo: boolean; porta: number | null; networkCachingMs?: number | null }
+}
+
 // Custom APIs for renderer
 const api = {}
 const configApi = {
@@ -154,30 +167,20 @@ const configApi = {
   getModo: () => ipcRenderer.invoke('config:getModo'),
   getModoConfig: () => ipcRenderer.invoke('config:getModoConfig'),
   getVmix: () => ipcRenderer.invoke('config:getVmix'),
-  setVmix: (vmix: {
-    ativo: boolean
-    ip: string
-    porta: number
-    inputSelecionado: { key: string; number: string; title: string; type: string } | null
-    inputSelecionadoCoberturas?: { key: string; number: string; title: string; type: string } | null
-    srt: { ativo: boolean; porta: number | null; networkCachingMs?: number | null }
-  }) => ipcRenderer.invoke('config:setVmix', vmix),
-  listarInputsVmix: (vmix: {
-    ativo: boolean
-    ip: string
-    porta: number
-    inputSelecionado: { key: string; number: string; title: string; type: string } | null
-    inputSelecionadoCoberturas?: { key: string; number: string; title: string; type: string } | null
-    srt: { ativo: boolean; porta: number | null; networkCachingMs?: number | null }
-  }) => ipcRenderer.invoke('config:listarInputsVmix', vmix),
-  acionarOverlayVmix: (vmix: {
-    ativo: boolean
-    ip: string
-    porta: number
-    inputSelecionado: { key: string; number: string; title: string; type: string } | null
-    inputSelecionadoCoberturas?: { key: string; number: string; title: string; type: string } | null
-    srt: { ativo: boolean; porta: number | null; networkCachingMs?: number | null }
-  }) => ipcRenderer.invoke('config:acionarOverlayVmix', vmix),
+  setVmix: (vmix: VmixPayload) => ipcRenderer.invoke('config:setVmix', vmix),
+  listarInputsVmix: (vmix: VmixPayload) => ipcRenderer.invoke('config:listarInputsVmix', vmix),
+  listarItensListaVmix: (vmix: VmixPayload, input: VmixInputPayload | null) =>
+    ipcRenderer.invoke('config:listarItensListaVmix', vmix, input),
+  obterEstadoListaVmix: (vmix: VmixPayload, input: VmixInputPayload | null) =>
+    ipcRenderer.invoke('config:obterEstadoListaVmix', vmix, input),
+  selecionarItemListaVmix: (
+    vmix: VmixPayload,
+    input: VmixInputPayload | null,
+    item: VmixListItemPayload | null
+  ) => ipcRenderer.invoke('config:selecionarItemListaVmix', vmix, input, item),
+  definirAutoNextListaVmix: (vmix: VmixPayload, input: VmixInputPayload | null, enabled: boolean) =>
+    ipcRenderer.invoke('config:definirAutoNextListaVmix', vmix, input, enabled),
+  acionarOverlayVmix: (vmix: VmixPayload) => ipcRenderer.invoke('config:acionarOverlayVmix', vmix),
   iniciarPreviewSrt: (vmix: {
     ativo: boolean
     ip: string

@@ -128,6 +128,8 @@ export type VmixConfig = {
   porta: number
   inputSelecionado: VmixInput | null
   inputSelecionadoCoberturas: VmixInput | null
+  inputLista: VmixInput | null
+  itemListaSelecionado: VmixListItem | null
   srt: SrtConfig
 }
 
@@ -136,6 +138,18 @@ export type VmixInput = {
   title: string
   type: string
   key: string
+}
+
+export type VmixListItem = {
+  index: number
+  title: string
+  value: string
+  selected: boolean
+}
+
+export type VmixListState = {
+  items: VmixListItem[]
+  autoPlayNext: boolean | null
 }
 
 export type SrtConfig = {
@@ -228,6 +242,18 @@ declare global {
       getVmix: () => Promise<VmixConfig>
       setVmix: (vmix: VmixConfig) => Promise<void>
       listarInputsVmix: (vmix: VmixConfig) => Promise<VmixInput[]>
+      listarItensListaVmix: (vmix: VmixConfig, input: VmixInput | null) => Promise<VmixListItem[]>
+      obterEstadoListaVmix: (vmix: VmixConfig, input: VmixInput | null) => Promise<VmixListState>
+      selecionarItemListaVmix: (
+        vmix: VmixConfig,
+        input: VmixInput | null,
+        item: VmixListItem | null
+      ) => Promise<{ ok: boolean }>
+      definirAutoNextListaVmix: (
+        vmix: VmixConfig,
+        input: VmixInput | null,
+        enabled: boolean
+      ) => Promise<{ ok: boolean }>
       acionarOverlayVmix: (vmix: VmixConfig) => Promise<{ ok: boolean }>
       iniciarPreviewSrt: (vmix: VmixConfig) => Promise<SrtPreviewStatus>
       pararPreviewSrt: () => Promise<SrtPreviewStatus>

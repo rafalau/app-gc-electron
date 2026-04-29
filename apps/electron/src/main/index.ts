@@ -18,7 +18,7 @@ import { registrarIpcSrtPlayer } from './ipc/srtPlayer'
 import { registrarIpcGcSync } from './ipc/gcSync'
 import { migrateDeploy } from './db/migrate'
 import { getStore } from './store/store'
-import { setSrtPlayerVisible } from './services/srtPlayer.service'
+import { stopSrtPlayer } from './services/srtPlayer.service'
 
 function getRuntimeIdentity() {
   if (__APP_MODE__ === 'HOST') {
@@ -151,7 +151,6 @@ function createWindow(): void {
     if (closingConfirmed) return
 
     event.preventDefault()
-    setSrtPlayerVisible(false)
 
     const store = await getStore()
     const modo = store.get('modo')
@@ -172,9 +171,8 @@ function createWindow(): void {
 
     if (result.response === 1) {
       closingConfirmed = true
+      stopSrtPlayer()
       mainWindow.close()
-    } else {
-      setSrtPlayerVisible(true)
     }
   })
 

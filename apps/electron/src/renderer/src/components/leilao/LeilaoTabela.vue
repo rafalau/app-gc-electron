@@ -64,14 +64,14 @@ function partesStatusSync(leilao: Leilao) {
 
 function classeStatusSync(leilao: Leilao) {
   if (leilao.gc_sync_status === 'error') {
-    return 'text-rose-600'
+    return 'text-rose-600 dark:text-rose-300'
   }
 
   if (leilao.gc_sync_at) {
-    return 'text-emerald-700'
+    return 'text-emerald-700 dark:text-emerald-300'
   }
 
-  return 'text-slate-400'
+  return 'text-slate-400 dark:text-slate-500'
 }
 
 function getDropdownItems(leilao: Leilao) {
@@ -113,7 +113,7 @@ function cancelarExclusao() {
 </script>
 
 <template>
-  <div class="border border-gray-200 rounded-lg overflow-visible bg-white shadow-md">
+  <div class="overflow-visible rounded-lg border border-gray-200 bg-white shadow-md dark:border-slate-700 dark:bg-slate-900">
     <!-- Cabeçalho da Tabela -->
     <div
       class="bg-gradient-to-r from-blue-600 to-blue-700 text-white px-4 py-2.5 grid grid-cols-12 text-xs md:text-sm font-semibold"
@@ -126,7 +126,7 @@ function cancelarExclusao() {
     </div>
 
     <!-- Linhas da Tabela -->
-    <div v-if="props.leiloes.length === 0" class="px-4 py-8 md:py-10 text-center text-gray-500">
+    <div v-if="props.leiloes.length === 0" class="px-4 py-8 text-center text-gray-500 dark:text-slate-400 md:py-10">
       <p class="text-sm md:text-base">Nenhum evento encontrado</p>
     </div>
 
@@ -134,12 +134,12 @@ function cancelarExclusao() {
       <div
         v-for="l in props.leiloes"
         :key="l.id"
-      class="px-4 py-2.5 grid grid-cols-12 items-center border-t border-gray-100 hover:bg-blue-50 transition-colors relative"
+        class="relative grid grid-cols-12 items-center border-t border-gray-100 px-4 py-2.5 transition-colors hover:bg-blue-50 dark:border-slate-800 dark:hover:bg-slate-800"
       >
         <!-- Data -->
         <div class="col-span-2 flex justify-center">
           <span
-            class="inline-flex px-2 py-1 rounded-lg bg-gray-100 border border-gray-200 text-xs font-medium text-gray-700"
+            class="inline-flex rounded-lg border border-gray-200 bg-gray-100 px-2 py-1 text-xs font-medium text-gray-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-200"
           >
             {{ formatarDataBR(l.data) }}
           </span>
@@ -147,13 +147,13 @@ function cancelarExclusao() {
 
         <!-- Nome do Evento -->
         <div class="col-span-4">
-          <div class="font-semibold text-gray-900 text-sm">{{ l.titulo_evento }}</div>
+          <div class="text-sm font-semibold text-gray-900 dark:text-slate-100">{{ l.titulo_evento }}</div>
         </div>
 
         <!-- Sync -->
         <div class="col-span-2 flex justify-center">
           <div
-            class="inline-flex min-w-[112px] max-w-full flex-col items-center rounded-2xl bg-slate-50 px-2.5 py-1.5 text-xs tracking-[0.02em]"
+            class="inline-flex min-w-[112px] max-w-full flex-col items-center rounded-2xl bg-slate-50 px-2.5 py-1.5 text-xs tracking-[0.02em] dark:bg-slate-800"
             :class="classeStatusSync(l)"
           >
             <span class="max-w-full truncate text-center font-medium">
@@ -169,7 +169,7 @@ function cancelarExclusao() {
         <div class="col-span-2 text-center">
           <button
             type="button"
-            class="inline-flex items-center gap-1 px-2 py-1 rounded-full bg-green-50 border border-green-200 text-xs font-medium text-green-700 transition-colors hover:bg-green-100 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-1"
+            class="inline-flex items-center gap-1 rounded-full border border-green-200 bg-green-50 px-2 py-1 text-xs font-medium text-green-700 transition-colors hover:bg-green-100 focus:outline-none focus:ring-2 focus:ring-green-500 focus:ring-offset-1 dark:border-green-700 dark:bg-green-950 dark:text-green-300 dark:hover:bg-green-900"
             @click="emit('animais', l)"
           >
             <i class="fas fa-horse-head text-xs" />
@@ -181,7 +181,7 @@ function cancelarExclusao() {
         <div class="col-span-2 flex items-center justify-center gap-2">
           <button
             type="button"
-            class="relative inline-flex h-9 w-9 items-center justify-center rounded-lg border border-red-200 bg-red-50 text-red-700 shadow-sm transition hover:border-red-300 hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-1"
+            class="relative inline-flex h-9 w-9 items-center justify-center rounded-lg border border-red-200 bg-red-50 text-red-700 shadow-sm transition hover:border-red-300 hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-1 dark:border-red-800 dark:bg-red-950 dark:text-red-300 dark:hover:bg-red-900"
             title="Modo Operação"
             @click="emit('operacao', l)"
           >
@@ -194,7 +194,7 @@ function cancelarExclusao() {
     </div>
 
     <!-- Rodapé com informações -->
-    <div class="px-4 py-2 bg-gray-50 border-t border-gray-100 text-xs text-gray-600">
+    <div class="border-t border-gray-100 bg-gray-50 px-4 py-2 text-xs text-gray-600 dark:border-slate-800 dark:bg-slate-950 dark:text-slate-400">
       Mostrando {{ props.leiloes.length }} de {{ props.leiloes.length }} evento(s)
     </div>
   </div>
@@ -203,13 +203,13 @@ function cancelarExclusao() {
   <div v-if="showConfirmDelete" class="fixed inset-0 z-50">
     <div class="absolute inset-0 bg-black/50" @click="cancelarExclusao"></div>
     <div class="absolute inset-0 flex items-center justify-center p-4">
-      <div class="w-full max-w-md bg-white rounded-lg shadow-xl border border-gray-200">
-        <div class="px-6 py-4 border-b border-gray-200">
+      <div class="w-full max-w-md rounded-lg border border-gray-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900">
+        <div class="border-b border-gray-200 px-6 py-4 dark:border-slate-700">
           <h3 class="font-bold text-lg text-gray-900">Confirmar exclusão</h3>
         </div>
 
-        <div class="px-6 py-4 space-y-4">
-          <p class="text-gray-700 text-sm">Tem certeza que deseja apagar esse evento?</p>
+        <div class="space-y-4 px-6 py-4">
+          <p class="text-sm text-gray-700 dark:text-slate-200">Tem certeza que deseja apagar esse evento?</p>
 
           <p class="text-sm text-red-600 font-medium">
             ⚠️ Ao apagar este evento, <span class="font-semibold">todos os animais</span> dele
@@ -217,14 +217,14 @@ function cancelarExclusao() {
           </p>
 
           <div>
-            <label class="block text-xs font-semibold text-gray-600 mb-2">
+            <label class="mb-2 block text-xs font-semibold text-gray-600 dark:text-slate-400">
               Digite <span class="font-bold text-red-600">EXCLUIR</span> para confirmar
             </label>
 
             <input
               v-model="confirmacaoTexto"
               type="text"
-              class="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm focus:ring-2 focus:ring-red-500 focus:border-transparent"
+              class="w-full rounded-lg border border-gray-300 px-3 py-2 text-sm focus:border-transparent focus:ring-2 focus:ring-red-500 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
               placeholder="Digite EXCLUIR"
               @input="applyUppercaseInput($event, (value) => (confirmacaoTexto = value))"
             />
@@ -232,11 +232,11 @@ function cancelarExclusao() {
         </div>
 
         <div
-          class="px-6 py-4 border-t border-gray-200 bg-gray-50 rounded-b-lg flex justify-end gap-3"
+          class="flex justify-end gap-3 rounded-b-lg border-t border-gray-200 bg-gray-50 px-6 py-4 dark:border-slate-700 dark:bg-slate-950"
         >
           <button
             type="button"
-            class="px-4 py-2 rounded-lg border border-gray-300 text-gray-700 font-medium text-sm hover:bg-gray-100 transition-colors"
+            class="rounded-lg border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 transition-colors hover:bg-gray-100 dark:border-slate-700 dark:text-slate-200 dark:hover:bg-slate-800"
             @click="cancelarExclusao"
           >
             Cancelar

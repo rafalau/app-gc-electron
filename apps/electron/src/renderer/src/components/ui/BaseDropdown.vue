@@ -39,7 +39,9 @@ function handleItemClick(item: DropdownItem) {
 }
 
 function getColorClass(color?: 'default' | 'danger') {
-  return color === 'danger' ? 'text-red-600 hover:bg-red-50' : 'text-gray-700 hover:bg-gray-100'
+  return color === 'danger'
+    ? 'text-red-600 hover:bg-red-50 dark:text-red-300 dark:hover:bg-red-950'
+    : 'text-gray-700 hover:bg-gray-100 dark:text-slate-200 dark:hover:bg-slate-800'
 }
 </script>
 
@@ -64,7 +66,7 @@ function getColorClass(color?: 'default' | 'danger') {
     <Transition name="dropdown-pop">
       <div
         v-if="isOpen"
-        class="absolute right-0 mt-1 w-56 origin-top-right bg-white border border-gray-200 rounded-lg shadow-xl z-50"
+        class="absolute right-0 z-50 mt-1 w-56 origin-top-right rounded-lg border border-gray-200 bg-white shadow-xl dark:border-slate-700 dark:bg-slate-900"
       >
         <button
           v-for="(item, index) in items"
@@ -74,8 +76,8 @@ function getColorClass(color?: 'default' | 'danger') {
           :class="[
             'w-full text-left px-4 py-2 text-sm font-medium transition-colors flex items-center gap-2',
             getColorClass(item.color),
-            item.disabled ? 'cursor-not-allowed opacity-50 hover:bg-white' : '',
-            index < items.length - 1 ? 'border-b border-gray-100' : ''
+            item.disabled ? 'cursor-not-allowed opacity-50 hover:bg-white dark:hover:bg-slate-900' : '',
+            index < items.length - 1 ? 'border-b border-gray-100 dark:border-slate-800' : ''
           ]"
           @click="handleItemClick(item)"
         >

@@ -316,6 +316,9 @@ export function registrarIpcJanela() {
       await carregarJanelaOperacao(existente, 'operation-vmix-editor', { leilaoId })
       existente.show()
       existente.focus()
+      await new Promise<void>((resolve) => {
+        existente.once('closed', () => resolve())
+      })
       return
     }
 
@@ -331,6 +334,9 @@ export function registrarIpcJanela() {
         sandbox: false
       }
     })
+    const fechado = new Promise<void>((resolve) => {
+      win.once('closed', () => resolve())
+    })
 
     win.on('ready-to-show', () => {
       centralizarNaTela(win, parent)
@@ -343,6 +349,7 @@ export function registrarIpcJanela() {
 
     janelasOperacao.set(chave, win)
     await carregarJanelaOperacao(win, 'operation-vmix-editor', { leilaoId })
+    await fechado
   })
 
   ipcMain.handle('janela:abrirEditorLeilaoRemoto', async (event, leilaoId: string) => {

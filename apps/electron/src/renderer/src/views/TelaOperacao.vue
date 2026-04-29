@@ -32,14 +32,18 @@ import {
 } from '@renderer/services/srtPlayer.service'
 import {
   acionarOverlayVmix,
-  obterConfiguracaoVmix
+  definirAutoNextListaVmix,
+  obterEstadoListaVmix,
+  obterConfiguracaoVmix,
+  selecionarItemListaVmix
 } from '@renderer/services/config.service'
-import type { VmixConfig } from '@renderer/types/config'
+import type { VmixConfig, VmixListItem } from '@renderer/types/config'
 
 const VMIX_DEFAULT_PORT = 8088
 const SRT_DEFAULT_PORT = 9001
 const SRT_RECONNECT_MAX_TENTATIVAS = 10
 const INTERVALO_COMPOSTO_PADRAO = 10
+const VMIX_LIST_SYNC_INTERVAL_MS = 1500
 const AJUSTES_LANCE_RAPIDO = [10, 20, 30, 50, 100, 500] as const
 
 const router = useRouter()
@@ -69,6 +73,11 @@ const acionandoOverlayVmix = ref(false)
 const srtPlayerMutado = ref(false)
 const recarregandoSrt = ref(false)
 const srtStatus = ref('')
+const carregandoItensListaVmix = ref(false)
+const alterandoAutoNextListaVmix = ref(false)
+const erroListaVmix = ref('')
+const itensListaVmix = ref<VmixListItem[]>([])
+const autoNextListaVmix = ref<boolean | null>(null)
 const seletorAnimalRef = ref<HTMLDivElement | null>(null)
 const srtPlayerHostRef = ref<HTMLDivElement | null>(null)
 const conexaoOperacao = ref<OperacaoConexaoInfo | null>(null)
@@ -79,7 +88,6 @@ const intervaloCompostoSegundos = ref(INTERVALO_COMPOSTO_PADRAO)
 let srtResizeObserver: ResizeObserver | null = null
 let srtScrollSyncHandler: (() => void) | null = null
 let srtResizeWindowHandler: (() => void) | null = null
-let recarregarConfigFocusHandler: (() => void) | null = null
 let operacaoEventSource: EventSource | null = null
 let configVmixEventSource: EventSource | null = null
 let aplicandoEstadoExterno = false
@@ -90,12 +98,16 @@ let srtReconnectTimer: number | null = null
 let srtReconnectTentativa = 0
 let srtReconnectToken = 0
 let rotacaoCompostaTimer: number | null = null
+let listaVmixSyncTimer: number | null = null
+let sincronizandoListaVmix = false
 const formVmix = ref<VmixConfig>({
   ativo: false,
   ip: '',
   porta: VMIX_DEFAULT_PORT,
   inputSelecionado: null,
   inputSelecionadoCoberturas: null,
+  inputLista: null,
+  itemListaSelecionado: null,
   srt: {
     ativo: false,
     porta: SRT_DEFAULT_PORT,
@@ -173,17 +185,23 @@ const totalDolarFormatado = computed(() => {
 
   return formatarMoeda(Math.round((valorLance * multiplicador) / cotacao))
 })
-const vmixConfigurado = computed(() => {
-  const inputOverlay = getInputOverlayVmix()
-
-  return Boolean(
+const vmixAtivoConfigurado = computed(() =>
+  Boolean(
     formVmix.value.ativo &&
       formVmix.value.ip.trim() &&
       Number.isInteger(Number(formVmix.value.porta)) &&
-      Number(formVmix.value.porta) > 0 &&
-      inputOverlay?.key
+      Number(formVmix.value.porta) > 0
   )
-})
+)
+const vmixConfigurado = computed(() =>
+  Boolean(
+    vmixAtivoConfigurado.value &&
+      getInputOverlayVmix()?.key
+  )
+)
+const listaVmixConfigurada = computed(() =>
+  Boolean(vmixAtivoConfigurado.value && formVmix.value.inputLista?.key)
+)
 function getInputOverlayVmix() {
   if (animalSelecionado.value?.categoria === 'COBERTURAS') {
     return formVmix.value.inputSelecionadoCoberturas
@@ -206,8 +224,14 @@ const endpointSrt = computed(() => {
   if (!srtConfigurado.value) return ''
   return `srt://${srtIp.value}:${formVmix.value.srt.porta}?timeout=5000000`
 })
-function voltar() {
-  router.push(`/leilao/${leilaoId}`)
+async function voltar() {
+  try {
+    cancelarReconexaoSrtPlayer()
+    await definirVisibilidadeSrtPlayer(false)
+    await desligarSrtPlayer()
+  } finally {
+    router.push(`/leilao/${leilaoId}`)
+  }
 }
 
 function normalizarIntervaloComposto(valor: number | string | null | undefined) {
@@ -363,12 +387,7 @@ async function iniciarRealtimeConfigVmix() {
   )
 
   source.onmessage = async () => {
-    try {
-      formVmix.value = await obterConfiguracaoVmix()
-      await sincronizarPlaybackSrtPlayerComReconexao()
-    } catch (error) {
-      erroOperacao.value = getFriendlyErrorMessage(error)
-    }
+    await recarregarConfiguracaoVmixOperacao()
   }
 
   source.onerror = () => {
@@ -383,11 +402,13 @@ async function iniciarRealtimeConfigVmix() {
 
 async function abrirModalConfiguracao() {
   await window.janela.abrirConfiguracaoVmixOperacao(leilaoId)
+  await recarregarConfiguracaoVmixOperacao()
 }
 
-async function recarregarConfiguracaoVmixLocal() {
+async function recarregarConfiguracaoVmixOperacao() {
   try {
     formVmix.value = await obterConfiguracaoVmix()
+    await carregarItensListaVmixOperacao()
     await nextTick()
     await sincronizarPlaybackSrtPlayerComReconexao()
   } catch (error) {
@@ -398,6 +419,123 @@ async function recarregarConfiguracaoVmixLocal() {
 async function toggleMuteSrtPlayer() {
   srtPlayerMutado.value = !srtPlayerMutado.value
   await sincronizarPlaybackSrtPlayerComReconexao()
+}
+
+async function carregarItensListaVmixOperacao(options: { silencioso?: boolean } = {}) {
+  if (!options.silencioso) {
+    erroListaVmix.value = ''
+    itensListaVmix.value = []
+  }
+
+  if (!listaVmixConfigurada.value || !formVmix.value.inputLista) {
+    autoNextListaVmix.value = null
+    return
+  }
+
+  if (!options.silencioso) {
+    carregandoItensListaVmix.value = true
+  }
+
+  try {
+    const estado = await obterEstadoListaVmix(formVmix.value, formVmix.value.inputLista)
+    itensListaVmix.value = estado.items
+    autoNextListaVmix.value = estado.autoPlayNext ?? autoNextListaVmix.value ?? true
+    const selecionado =
+      itensListaVmix.value.find((item) => item.selected) ??
+      itensListaVmix.value.find((item) => item.index === formVmix.value.itemListaSelecionado?.index) ??
+      null
+    formVmix.value = {
+      ...formVmix.value,
+      itemListaSelecionado: selecionado
+    }
+  } catch (error) {
+    if (!options.silencioso) {
+      erroListaVmix.value = getFriendlyErrorMessage(error)
+    }
+  } finally {
+    if (!options.silencioso) {
+      carregandoItensListaVmix.value = false
+    }
+  }
+}
+
+async function sincronizarListaVmixComVmix() {
+  if (
+    sincronizandoListaVmix ||
+    carregandoItensListaVmix.value ||
+    alterandoAutoNextListaVmix.value ||
+    !listaVmixConfigurada.value
+  ) {
+    return
+  }
+
+  sincronizandoListaVmix = true
+
+  try {
+    await carregarItensListaVmixOperacao({ silencioso: true })
+  } finally {
+    sincronizandoListaVmix = false
+  }
+}
+
+function iniciarSincronizacaoListaVmix() {
+  if (listaVmixSyncTimer !== null) {
+    window.clearInterval(listaVmixSyncTimer)
+  }
+
+  listaVmixSyncTimer = window.setInterval(() => {
+    void sincronizarListaVmixComVmix()
+  }, VMIX_LIST_SYNC_INTERVAL_MS)
+}
+
+function pararSincronizacaoListaVmix() {
+  if (listaVmixSyncTimer !== null) {
+    window.clearInterval(listaVmixSyncTimer)
+    listaVmixSyncTimer = null
+  }
+}
+
+async function toggleAutoNextListaVmix() {
+  if (!formVmix.value.inputLista || alterandoAutoNextListaVmix.value) return
+
+  const proximoEstado = !autoNextListaVmix.value
+  erroListaVmix.value = ''
+  alterandoAutoNextListaVmix.value = true
+
+  try {
+    await definirAutoNextListaVmix(formVmix.value, formVmix.value.inputLista, proximoEstado)
+    autoNextListaVmix.value = proximoEstado
+    void carregarItensListaVmixOperacao()
+  } catch (error) {
+    erroListaVmix.value = getFriendlyErrorMessage(error)
+  } finally {
+    alterandoAutoNextListaVmix.value = false
+  }
+}
+
+async function selecionarItemListaVmixOperacao(event: Event) {
+  const index = Number((event.target as HTMLSelectElement).value)
+  const item = itensListaVmix.value.find((itemLista) => itemLista.index === index) ?? null
+  if (!item || !formVmix.value.inputLista) return
+
+  erroListaVmix.value = ''
+
+  try {
+    await selecionarItemListaVmix(formVmix.value, formVmix.value.inputLista, item)
+    itensListaVmix.value = itensListaVmix.value.map((itemLista) => ({
+      ...itemLista,
+      selected: itemLista.index === item.index
+    }))
+    formVmix.value = {
+      ...formVmix.value,
+      itemListaSelecionado: {
+        ...item,
+        selected: true
+      }
+    }
+  } catch (error) {
+    erroListaVmix.value = getFriendlyErrorMessage(error)
+  }
 }
 
 async function recarregarSrtPlayerManual() {
@@ -1042,6 +1180,7 @@ onMounted(async () => {
   await window.janela.definirPreset('OPERACAO')
   try {
     formVmix.value = await obterConfiguracaoVmix()
+    await carregarItensListaVmixOperacao()
     arquivoInfo.value = await obterArquivoOperacao(leilaoId)
     const estado = await obterEstadoOperacao(leilaoId)
     if (estado) {
@@ -1049,6 +1188,7 @@ onMounted(async () => {
     }
     await iniciarRealtimeOperacao()
     await iniciarRealtimeConfigVmix()
+    iniciarSincronizacaoListaVmix()
   } catch (error) {
     erroOperacao.value = getFriendlyErrorMessage(error)
     const conexao = await obterConexaoOperacao()
@@ -1060,6 +1200,7 @@ onMounted(async () => {
       return
     }
   }
+  await nextTick()
   await sincronizarPlaybackSrtPlayerComReconexao()
   await sincronizarArquivo()
   focarCampoLance()
@@ -1068,15 +1209,11 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   void window.janela.definirPreset('DESKTOP')
   limparRotacaoComposta()
+  pararSincronizacaoListaVmix()
 })
 
 onMounted(() => {
   document.addEventListener('click', handleClickOutside)
-
-  recarregarConfigFocusHandler = () => {
-    void recarregarConfiguracaoVmixLocal()
-  }
-  window.addEventListener('focus', recarregarConfigFocusHandler)
 })
 
 onMounted(() => {
@@ -1115,10 +1252,6 @@ onUnmounted(() => {
     window.removeEventListener('resize', srtResizeWindowHandler)
     srtResizeWindowHandler = null
   }
-  if (recarregarConfigFocusHandler) {
-    window.removeEventListener('focus', recarregarConfigFocusHandler)
-    recarregarConfigFocusHandler = null
-  }
   if (srtBoundsSyncTimer !== null) {
     window.clearTimeout(srtBoundsSyncTimer)
     srtBoundsSyncTimer = null
@@ -1136,12 +1269,11 @@ onUnmounted(() => {
     configVmixEventSource.close()
     configVmixEventSource = null
   }
-  void desligarSrtPlayer()
 })
 </script>
 
 <template>
-  <div class="min-h-screen bg-slate-100 p-4">
+  <div class="min-h-screen bg-slate-100 p-4 dark:bg-slate-950">
     <div class="mx-auto flex w-full min-w-0 flex-col gap-4">
       <div class="flex flex-wrap items-center justify-between gap-3 max-[500px]:flex-col max-[500px]:items-stretch">
         <button
@@ -1244,6 +1376,43 @@ onUnmounted(() => {
           >
             {{ acionandoOverlayVmix ? 'Enviando...' : 'OVERLAY GC' }}
           </button>
+
+          <div v-if="listaVmixConfigurada" class="relative">
+            <div class="flex gap-2">
+              <div class="relative min-w-0 flex-1">
+              <select
+                :value="formVmix.itemListaSelecionado?.index ?? ''"
+                class="w-full appearance-none rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 pr-10 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100 disabled:cursor-wait disabled:opacity-70 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:bg-slate-900 dark:focus:ring-blue-950"
+                :disabled="carregandoItensListaVmix || itensListaVmix.length === 0"
+                @change="selecionarItemListaVmixOperacao"
+              >
+                <option value="">
+                  {{ carregandoItensListaVmix ? 'Carregando LIST...' : 'Selecione um item' }}
+                </option>
+                <option v-for="item in itensListaVmix" :key="item.index" :value="item.index">
+                  {{ item.title }}
+                </option>
+              </select>
+              <i class="fas fa-chevron-down pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-xs text-slate-400" />
+              </div>
+              <button
+                type="button"
+                class="shrink-0 rounded-xl border px-3 py-2 text-xs font-bold uppercase tracking-[0.08em] shadow-sm transition disabled:cursor-wait disabled:opacity-70"
+                :class="
+                  autoNextListaVmix
+                    ? 'border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 dark:hover:bg-emerald-900'
+                    : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300 dark:hover:bg-slate-800'
+                "
+                :disabled="alterandoAutoNextListaVmix || carregandoItensListaVmix"
+                @click="toggleAutoNextListaVmix"
+              >
+                AUTONEXT: {{ autoNextListaVmix ? 'ON' : 'OFF' }}
+              </button>
+            </div>
+            <div v-if="erroListaVmix" class="mt-2 text-xs font-medium text-red-600 dark:text-red-300">
+              {{ erroListaVmix }}
+            </div>
+          </div>
 
           <div class="hidden rounded-3xl border border-slate-200 bg-white p-4 shadow-sm md:block">
             <div class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
@@ -1467,7 +1636,7 @@ onUnmounted(() => {
           </div>
         </div>
 
-        <div class="rounded-3xl border border-blue-300 bg-gradient-to-b from-blue-200 via-blue-100 to-white p-4 shadow-md shadow-blue-200/80">
+        <div class="rounded-3xl border border-blue-300 bg-gradient-to-b from-blue-200 via-blue-100 to-white p-4 shadow-md shadow-blue-200/80 dark:border-slate-700 dark:from-slate-900 dark:via-slate-900 dark:to-slate-950 dark:shadow-none">
         <div class="text-xs font-semibold uppercase tracking-[0.16em] text-slate-500">
           Lances
         </div>
@@ -1482,7 +1651,7 @@ onUnmounted(() => {
                 'rounded-full border px-2.5 py-1 transition',
                 modoSelecaoOperacao === 'SIMPLES'
                   ? 'border-blue-600 bg-blue-600 text-white'
-                  : 'border-slate-300 bg-white text-slate-600 hover:border-slate-400'
+                  : 'border-slate-300 bg-white text-slate-600 hover:border-slate-400 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300 dark:hover:border-slate-500'
               ]"
               @click="definirModoSelecaoOperacao('SIMPLES')"
             >
@@ -1494,7 +1663,7 @@ onUnmounted(() => {
                 'rounded-full border px-2.5 py-1 transition',
                 modoSelecaoOperacao === 'COMPOSTO'
                   ? 'border-blue-600 bg-blue-600 text-white'
-                  : 'border-slate-300 bg-white text-slate-600 hover:border-slate-400'
+                  : 'border-slate-300 bg-white text-slate-600 hover:border-slate-400 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300 dark:hover:border-slate-500'
               ]"
               @click="definirModoSelecaoOperacao('COMPOSTO')"
             >
@@ -1504,7 +1673,7 @@ onUnmounted(() => {
 
           <div
             v-if="modoSelecaoOperacao === 'COMPOSTO'"
-            class="rounded-2xl border border-slate-200 bg-white/80 px-3 py-3"
+            class="rounded-2xl border border-slate-200 bg-white/80 px-3 py-3 dark:border-slate-700 dark:bg-slate-900/80"
           >
             <div class="flex items-end gap-3">
               <div class="min-w-0 flex-1">
@@ -1513,7 +1682,7 @@ onUnmounted(() => {
                 </div>
                 <input
                   v-model.number="intervaloCompostoSegundos"
-                  class="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 shadow-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100"
+                  class="mt-1 w-full rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-800 shadow-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:bg-slate-900 dark:focus:ring-blue-950"
                   type="number"
                   min="1"
                   step="1"
@@ -1529,7 +1698,7 @@ onUnmounted(() => {
             <div ref="seletorAnimalRef" class="relative min-w-0 flex-1">
               <button
                 type="button"
-                class="flex w-full items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-left text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100"
+                class="flex w-full items-center justify-between gap-3 rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-left text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:bg-slate-900 dark:focus:ring-blue-950"
                 @click="toggleSeletorAnimal"
               >
                 <span class="min-w-0 truncate">
@@ -1545,11 +1714,11 @@ onUnmounted(() => {
 
               <div
                 v-if="seletorAnimalAberto"
-                class="absolute z-20 mt-2 w-full rounded-xl border border-slate-200 bg-white p-2 shadow-xl"
+                class="absolute z-20 mt-2 w-full rounded-xl border border-slate-200 bg-white p-2 shadow-xl dark:border-slate-700 dark:bg-slate-900"
               >
                 <input
                   v-model="buscaAnimal"
-                  class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800 shadow-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100"
+                  class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800 shadow-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:bg-slate-900 dark:focus:ring-blue-950"
                   type="text"
                   placeholder="Buscar por lote ou nome"
                   @input="applyUppercaseInput($event, (value) => (buscaAnimal = value))"
@@ -1560,19 +1729,19 @@ onUnmounted(() => {
 
                 <div
                   v-if="modoSelecaoOperacao === 'COMPOSTO'"
-                  class="mt-2 rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-[11px] text-blue-800"
+                  class="mt-2 rounded-xl border border-blue-100 bg-blue-50 px-3 py-2 text-[11px] text-blue-800 dark:border-blue-900 dark:bg-blue-950 dark:text-blue-200"
                 >
                   Selecione 2 ou mais lotes para alternar automaticamente.
                 </div>
 
-                <div class="mt-2 max-h-64 overflow-auto rounded-xl border border-slate-100">
+                <div class="mt-2 max-h-64 overflow-auto rounded-xl border border-slate-100 dark:border-slate-700">
                   <button
                     v-for="(animal, index) in animaisFiltradosOperacao"
                     :key="animal.id"
                     type="button"
                     :class="[
-                      'flex w-full items-center justify-between gap-3 border-b border-slate-100 px-4 py-3 text-left text-sm text-slate-700 transition last:border-b-0',
-                      index === indiceAnimalDestacado ? 'bg-blue-50' : 'hover:bg-slate-50'
+                      'flex w-full items-center justify-between gap-3 border-b border-slate-100 px-4 py-3 text-left text-sm text-slate-700 transition last:border-b-0 dark:border-slate-800 dark:text-slate-200',
+                      index === indiceAnimalDestacado ? 'bg-blue-50 dark:bg-slate-800' : 'hover:bg-slate-50 dark:hover:bg-slate-800'
                     ]"
                     @click="selecionarAnimalOperacao(animal.id)"
                   >
@@ -1629,7 +1798,7 @@ onUnmounted(() => {
 
           <div
             v-if="modoSelecaoOperacao === 'COMPOSTO' && animaisSelecionadosCompostos.length > 0"
-            class="rounded-2xl border border-slate-200 bg-white/90 px-3 py-3"
+            class="rounded-2xl border border-slate-200 bg-white/90 px-3 py-3 dark:border-slate-700 dark:bg-slate-900/90"
           >
             <div class="text-[10px] font-semibold uppercase tracking-[0.16em] text-slate-500">
               Lotes em rotação
@@ -1642,7 +1811,7 @@ onUnmounted(() => {
                 :class="
                   animalSelecionadoId === animal.id
                     ? 'bg-blue-600 text-white'
-                    : 'bg-slate-100 text-slate-700'
+                    : 'bg-slate-100 text-slate-700 dark:bg-slate-800 dark:text-slate-200'
                 "
               >
                 {{ animal.lote }}
@@ -1653,7 +1822,7 @@ onUnmounted(() => {
           <input
             ref="inputLanceRef"
             v-model="lanceDigitado"
-            class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-center text-2xl font-bold text-slate-900 shadow-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100"
+            class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-center text-2xl font-bold text-slate-900 shadow-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:bg-slate-900 dark:focus:ring-blue-950"
             type="text"
             inputmode="decimal"
             placeholder="Digite o lance"
@@ -1666,7 +1835,7 @@ onUnmounted(() => {
               v-for="valor in AJUSTES_LANCE_RAPIDO"
               :key="`mais-${valor}`"
               type="button"
-              class="min-w-0 flex-1 rounded-lg border border-emerald-200 bg-emerald-50 px-1 py-1.5 text-sm font-semibold leading-none text-emerald-700 transition hover:border-emerald-300 hover:bg-emerald-100"
+              class="min-w-0 flex-1 rounded-lg border border-emerald-200 bg-emerald-50 px-1 py-1.5 text-sm font-semibold leading-none text-emerald-700 transition hover:border-emerald-300 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 dark:hover:bg-emerald-900"
               @click="ajustarLanceRapido(valor)"
             >
               +{{ valor }}
@@ -1678,7 +1847,7 @@ onUnmounted(() => {
               v-for="valor in AJUSTES_LANCE_RAPIDO"
               :key="`menos-${valor}`"
               type="button"
-              class="min-w-0 flex-1 rounded-lg border border-rose-200 bg-rose-50 px-1 py-1.5 text-sm font-semibold leading-none text-rose-700 transition hover:border-rose-300 hover:bg-rose-100"
+              class="min-w-0 flex-1 rounded-lg border border-rose-200 bg-rose-50 px-1 py-1.5 text-sm font-semibold leading-none text-rose-700 transition hover:border-rose-300 hover:bg-rose-100 dark:border-rose-800 dark:bg-rose-950 dark:text-rose-300 dark:hover:bg-rose-900"
               @click="ajustarLanceRapido(-valor)"
             >
               -{{ valor }}
@@ -1695,21 +1864,58 @@ onUnmounted(() => {
             {{ acionandoOverlayVmix ? 'Enviando...' : 'OVERLAY GC' }}
           </button>
 
-          <div class="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-center">
+          <div v-if="listaVmixConfigurada && !srtConfigurado" class="relative">
+            <div class="flex gap-2">
+              <div class="relative min-w-0 flex-1">
+              <select
+                :value="formVmix.itemListaSelecionado?.index ?? ''"
+                class="w-full appearance-none rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 pr-10 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100 disabled:cursor-wait disabled:opacity-70 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:bg-slate-900 dark:focus:ring-blue-950"
+                :disabled="carregandoItensListaVmix || itensListaVmix.length === 0"
+                @change="selecionarItemListaVmixOperacao"
+              >
+                <option value="">
+                  {{ carregandoItensListaVmix ? 'Carregando LIST...' : 'Selecione um item' }}
+                </option>
+                <option v-for="item in itensListaVmix" :key="item.index" :value="item.index">
+                  {{ item.title }}
+                </option>
+              </select>
+              <i class="fas fa-chevron-down pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-xs text-slate-400" />
+              </div>
+              <button
+                type="button"
+                class="shrink-0 rounded-xl border px-3 py-2 text-xs font-bold uppercase tracking-[0.08em] shadow-sm transition disabled:cursor-wait disabled:opacity-70"
+                :class="
+                  autoNextListaVmix
+                    ? 'border-emerald-300 bg-emerald-50 text-emerald-700 hover:bg-emerald-100 dark:border-emerald-800 dark:bg-emerald-950 dark:text-emerald-300 dark:hover:bg-emerald-900'
+                    : 'border-slate-300 bg-white text-slate-700 hover:bg-slate-50 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-300 dark:hover:bg-slate-800'
+                "
+                :disabled="alterandoAutoNextListaVmix || carregandoItensListaVmix"
+                @click="toggleAutoNextListaVmix"
+              >
+                AUTONEXT: {{ autoNextListaVmix ? 'ON' : 'OFF' }}
+              </button>
+            </div>
+            <div v-if="erroListaVmix" class="mt-2 text-xs font-medium text-red-600 dark:text-red-300">
+              {{ erroListaVmix }}
+            </div>
+          </div>
+
+          <div class="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3 text-center dark:border-emerald-800 dark:bg-emerald-950">
             <div class="text-[11px] font-semibold uppercase tracking-[0.16em] text-emerald-700">
               Lance Atual
             </div>
-            <div class="mt-1 text-3xl font-black text-emerald-700">{{ lanceAtual }}</div>
-            <div class="mt-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-emerald-800/80">
+            <div class="mt-1 text-3xl font-black text-emerald-700 dark:text-emerald-300">{{ lanceAtual }}</div>
+            <div class="mt-1 text-[11px] font-semibold uppercase tracking-[0.14em] text-emerald-800/80 dark:text-emerald-200">
               Total: {{ totalLanceFormatado }}
             </div>
           </div>
 
           <div
             v-if="leilao?.usa_dolar && leilao?.cotacao"
-            class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-center"
+            class="rounded-xl border border-amber-200 bg-amber-50 px-4 py-2 text-center dark:border-amber-800 dark:bg-amber-950"
           >
-            <div class="text-[11px] font-semibold uppercase tracking-[0.14em] text-amber-800">
+            <div class="text-[11px] font-semibold uppercase tracking-[0.14em] text-amber-800 dark:text-amber-200">
               Lance U$: {{ lanceDolarFormatado }} | Total U$: {{ totalDolarFormatado }}
             </div>
           </div>

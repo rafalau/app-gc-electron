@@ -3,7 +3,9 @@ import type {
   ModoConfig,
   SrtPreviewStatus,
   VmixConfig,
-  VmixInput
+  VmixInput,
+  VmixListItem,
+  VmixListState
 } from '../types/config'
 import type { ApiImportProviderConfig } from '../types/importacao'
 import { getFriendlyErrorMessage } from '../utils/errorMessage'
@@ -32,6 +34,21 @@ function normalizarInput(input: VmixInput | null): VmixInput | null {
   }
 }
 
+function normalizarItemLista(item: VmixListItem | null): VmixListItem | null {
+  if (!item) return null
+
+  const index = Number(item.index)
+
+  return Number.isInteger(index) && index > 0
+    ? {
+        index,
+        title: String(item.title ?? ''),
+        value: String(item.value ?? ''),
+        selected: Boolean(item.selected)
+      }
+    : null
+}
+
 function normalizarConfig(config: VmixConfig): VmixConfig {
   const porta = Number(config.porta)
   const portaSrt = Number(config.srt?.porta)
@@ -43,6 +60,8 @@ function normalizarConfig(config: VmixConfig): VmixConfig {
     porta: Number.isInteger(porta) && porta > 0 ? porta : VMIX_DEFAULT_PORT,
     inputSelecionado: normalizarInput(config.inputSelecionado),
     inputSelecionadoCoberturas: normalizarInput(config.inputSelecionadoCoberturas),
+    inputLista: normalizarInput(config.inputLista),
+    itemListaSelecionado: normalizarItemLista(config.itemListaSelecionado),
     srt: {
       ativo: Boolean(config.srt?.ativo),
       porta: Number.isInteger(portaSrt) && portaSrt > 0 ? portaSrt : SRT_DEFAULT_PORT,
@@ -73,6 +92,40 @@ export async function salvarConfiguracaoVmix(config: VmixConfig): Promise<void> 
 
 export async function listarInputsVmix(config: VmixConfig): Promise<VmixInput[]> {
   return window.config.listarInputsVmix(normalizarConfig(config))
+}
+
+export async function listarItensListaVmix(
+  config: VmixConfig,
+  input: VmixInput | null
+): Promise<VmixListItem[]> {
+  return window.config.listarItensListaVmix(normalizarConfig(config), normalizarInput(input))
+}
+
+export async function obterEstadoListaVmix(
+  config: VmixConfig,
+  input: VmixInput | null
+): Promise<VmixListState> {
+  return window.config.obterEstadoListaVmix(normalizarConfig(config), normalizarInput(input))
+}
+
+export async function selecionarItemListaVmix(
+  config: VmixConfig,
+  input: VmixInput | null,
+  item: VmixListItem | null
+): Promise<{ ok: boolean }> {
+  return window.config.selecionarItemListaVmix(
+    normalizarConfig(config),
+    normalizarInput(input),
+    normalizarItemLista(item)
+  )
+}
+
+export async function definirAutoNextListaVmix(
+  config: VmixConfig,
+  input: VmixInput | null,
+  enabled: boolean
+): Promise<{ ok: boolean }> {
+  return window.config.definirAutoNextListaVmix(normalizarConfig(config), normalizarInput(input), enabled)
 }
 
 export async function acionarOverlayVmix(config: VmixConfig): Promise<{ ok: boolean }> {

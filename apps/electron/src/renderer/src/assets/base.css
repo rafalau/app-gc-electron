@@ -36,3 +36,73 @@ button:disabled,
 [role='button']:disabled {
   cursor: not-allowed;
 }
+
+.dark body {
+  background: #0f172a;
+  color: #e2e8f0;
+}
+
+.dark .bg-white,
+.dark .bg-gray-50,
+.dark .bg-slate-50,
+.dark .bg-blue-50 {
+  background-color: #111827;
+}
+
+.dark .bg-slate-100,
+.dark .bg-gray-100 {
+  background-color: #1f2937;
+}
+
+.dark .border-gray-100,
+.dark .border-gray-200,
+.dark .border-gray-300,
+.dark .border-slate-100,
+.dark .border-slate-200,
+.dark .border-slate-300 {
+  border-color: #334155;
+}
+
+.dark .text-gray-900,
+.dark .text-slate-900 {
+  color: #f8fafc;
+}
+
+.dark .text-gray-800,
+.dark .text-slate-800,
+.dark .text-gray-700,
+.dark .text-slate-700 {
+  color: #e2e8f0;
+}
+
+.dark .text-gray-600,
+.dark .text-slate-600,
+.dark .text-gray-500,
+.dark .text-slate-500 {
+  color: #94a3b8;
+}
+
+.dark input,
+.dark textarea,
+.dark select {
+  background-color: #0f172a;
+  border-color: #334155;
+  color: #f8fafc;
+}
+
+.dark input::placeholder,
+.dark textarea::placeholder {
+  color: #64748b;
+}
+
+.dark .hover\:bg-blue-50:hover,
+.dark .hover\:bg-slate-50:hover,
+.dark .hover\:bg-gray-50:hover,
+.dark .hover\:bg-slate-100:hover,
+.dark .hover\:bg-gray-100:hover {
+  background-color: #1e293b;
+}
+
+.dark .hover\:text-blue-700:hover {
+  color: #bfdbfe;
+}

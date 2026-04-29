@@ -8,6 +8,7 @@ import BaseButton from '@renderer/components/ui/BaseButton.vue'
 import BaseDropdown from '@renderer/components/ui/BaseDropdown.vue'
 import BaseToast from '@renderer/components/ui/BaseToast.vue'
 import { useLeiloes } from '@renderer/composables/useLeiloes'
+import { useTheme } from '@renderer/composables/useTheme'
 import type { Leilao } from '@renderer/types/leilao'
 import type { GcApiConfig, GcApiSyncSummary } from '@renderer/types/config'
 import {
@@ -22,6 +23,7 @@ import { obterConexaoOperacao } from '@renderer/services/operacao.service'
 import { applyUppercaseInput } from '@renderer/utils/uppercaseInput'
 
 const router = useRouter()
+const { tema, alternarTema } = useTheme()
 const conexaoOperacao = ref<Awaited<ReturnType<typeof obterConexaoOperacao>> | null>(null)
 const copiandoIp = ref(false)
 const salvandoIpHost = ref(false)
@@ -246,10 +248,10 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="p-4 md:p-6 lg:p-8 min-h-screen bg-blue-50">
+  <div class="min-h-screen bg-blue-50 p-4 transition-colors dark:bg-slate-950 md:p-6 lg:p-8">
     <div
       v-if="conexaoOperacao?.modo === 'HOST' && ipHostPrincipal"
-      class="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-blue-200 bg-white px-4 py-3 shadow-sm"
+      class="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-blue-200 bg-white px-4 py-3 shadow-sm dark:border-slate-700 dark:bg-slate-900"
     >
       <div class="flex flex-wrap items-center gap-2">
         <label
@@ -261,7 +263,7 @@ onMounted(async () => {
         <select
           id="ip-host-selecionado"
           v-model="ipHostSelecionado"
-          class="rounded-lg border border-slate-200 bg-white px-2 py-1 text-sm font-semibold text-slate-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100"
+          class="rounded-lg border border-slate-200 bg-white px-2 py-1 text-sm font-semibold text-slate-800 outline-none transition focus:border-blue-400 focus:ring-2 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100"
         >
           <option v-for="ip in ipsHostDisponiveis" :key="ip" :value="ip">
             {{ ip }}
@@ -280,7 +282,7 @@ onMounted(async () => {
 
       <button
         type="button"
-        class="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700"
+        class="inline-flex items-center gap-2 rounded-xl border border-slate-200 bg-slate-50 px-3 py-2 text-sm font-medium text-slate-700 transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 dark:border-slate-700 dark:bg-slate-800 dark:text-slate-100 dark:hover:border-blue-500 dark:hover:bg-slate-700 dark:hover:text-blue-200"
         @click="copiarIpHost"
       >
         <i class="fas fa-copy text-xs" />
@@ -290,7 +292,7 @@ onMounted(async () => {
 
     <div
       v-else-if="conexaoOperacao?.modo === 'REMOTO'"
-      class="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm"
+      class="mb-4 flex flex-wrap items-center justify-between gap-3 rounded-2xl border border-slate-200 bg-white px-4 py-3 shadow-sm dark:border-slate-700 dark:bg-slate-900"
     >
       <div>
         <div class="text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">Host conectado</div>
@@ -325,6 +327,11 @@ onMounted(async () => {
       </div>
 
       <div class="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+        <BaseButton variante="secundario" class="w-full md:w-auto" @click="alternarTema">
+          <i :class="['fas mr-1', tema === 'dark' ? 'fa-sun' : 'fa-moon']" />
+          {{ tema === 'dark' ? 'Modo claro' : 'Modo dark' }}
+        </BaseButton>
+
         <BaseDropdown
           v-if="modoAtual !== 'REMOTO'"
           label="Sincronização"
@@ -356,7 +363,7 @@ onMounted(async () => {
       <i class="fas fa-search absolute left-3 top-1/2 -translate-y-1/2 text-gray-400" />
       <input
         v-model="busca"
-        class="w-full border bg-white border-gray-300 rounded-lg pl-10 pr-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+        class="w-full rounded-lg border border-gray-300 bg-white py-2 pl-10 pr-4 text-sm focus:border-transparent focus:outline-none focus:ring-2 focus:ring-blue-500 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100"
         type="text"
         @input="applyUppercaseInput($event, (value) => (busca = value))"
       />

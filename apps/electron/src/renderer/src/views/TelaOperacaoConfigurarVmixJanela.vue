@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import BaseButton from '@renderer/components/ui/BaseButton.vue'
 import BaseSwitch from '@renderer/components/ui/BaseSwitch.vue'
 import { applyUppercaseInput } from '@renderer/utils/uppercaseInput'
@@ -21,12 +21,17 @@ const erroInputs = ref('')
 const modoOperacao = ref<'HOST' | 'REMOTO' | null>(null)
 const modoConfig = ref<ModoConfig | null>(null)
 const inputs = ref<VmixInput[]>([])
+const inputsLista = computed(() =>
+  inputs.value.filter((input) => String(input.type ?? '').toLowerCase().includes('list'))
+)
 const form = ref<VmixConfig>({
   ativo: false,
   ip: '',
   porta: VMIX_DEFAULT_PORT,
   inputSelecionado: null,
   inputSelecionadoCoberturas: null,
+  inputLista: null,
+  itemListaSelecionado: null,
   srt: {
     ativo: false,
     porta: SRT_DEFAULT_PORT,
@@ -36,7 +41,12 @@ const form = ref<VmixConfig>({
 
 function getConfigApi(): Window['config'] {
   const config = windowComConfig.config
-  if (!config?.getVmix || !config?.setVmix || !config.getModoConfig || !config.listarInputsVmix) {
+  if (
+    !config?.getVmix ||
+    !config?.setVmix ||
+    !config.getModoConfig ||
+    !config.listarInputsVmix
+  ) {
     throw new Error('API local de configuração indisponível nesta janela.')
   }
 
@@ -78,6 +88,8 @@ function aplicarDefaultsFormulario(config: VmixConfig, conexao: ModoConfig): Vmi
     porta: Number(config.porta) > 0 ? config.porta : VMIX_DEFAULT_PORT,
     inputSelecionado: config.inputSelecionado ?? null,
     inputSelecionadoCoberturas: config.inputSelecionadoCoberturas ?? null,
+    inputLista: config.inputLista ?? null,
+    itemListaSelecionado: config.itemListaSelecionado ?? null,
     srt: {
       ...config.srt,
       porta: Number(config.srt?.porta) > 0 ? config.srt.porta : SRT_DEFAULT_PORT,
@@ -114,6 +126,23 @@ function normalizarConfigFormulario(config: VmixConfig): VmixConfig {
           type: String(config.inputSelecionadoCoberturas.type ?? '').trim()
         }
       : null,
+    inputLista: config.inputLista
+      ? {
+          key: String(config.inputLista.key ?? '').trim(),
+          number: String(config.inputLista.number ?? '').trim(),
+          title: String(config.inputLista.title ?? '').trim(),
+          type: String(config.inputLista.type ?? '').trim()
+        }
+      : null,
+    itemListaSelecionado:
+      config.itemListaSelecionado && Number(config.itemListaSelecionado.index) > 0
+        ? {
+            index: Number(config.itemListaSelecionado.index),
+            title: String(config.itemListaSelecionado.title ?? '').trim(),
+            value: String(config.itemListaSelecionado.value ?? '').trim(),
+            selected: Boolean(config.itemListaSelecionado.selected)
+          }
+        : null,
     srt: {
       ativo: Boolean(config.srt?.ativo),
       porta: Number.isInteger(portaSrt) && portaSrt > 0 ? portaSrt : SRT_DEFAULT_PORT,
@@ -153,6 +182,13 @@ async function carregarListaInputs() {
 
   try {
     inputs.value = await listarInputsJanela()
+    if (
+      form.value.inputLista &&
+      !inputs.value.some((input) => input.key === form.value.inputLista?.key)
+    ) {
+      form.value.inputLista = null
+      form.value.itemListaSelecionado = null
+    }
   } catch (errorAtual) {
     erroInputs.value = (errorAtual as Error).message
     inputs.value = []
@@ -189,6 +225,15 @@ function selecionarInputVmixCoberturas(event: Event) {
   form.value = {
     ...form.value,
     inputSelecionadoCoberturas: inputs.value.find((input) => input.key === key) ?? null
+  }
+}
+
+function selecionarInputListaVmix(event: Event) {
+  const key = (event.target as HTMLSelectElement).value
+  form.value = {
+    ...form.value,
+    inputLista: inputs.value.find((input) => input.key === key) ?? null,
+    itemListaSelecionado: null
   }
 }
 
@@ -369,7 +414,7 @@ onMounted(() => {
                 :disabled="!form.ativo || carregandoInputs || inputs.length === 0"
                 @change="selecionarInputVmix"
               >
-                <option value="">Selecione um input</option>
+                <option value="">NÃO SELECIONADO</option>
                 <option v-for="input in inputs" :key="input.key" :value="input.key">
                   {{ input.title || `Input ${input.number}` }} | #{{ input.number }} | {{ input.type }}
                 </option>
@@ -389,8 +434,28 @@ onMounted(() => {
                 :disabled="!form.ativo || carregandoInputs || inputs.length === 0"
                 @change="selecionarInputVmixCoberturas"
               >
-                <option value="">Selecione um input</option>
+                <option value="">NÃO SELECIONADO</option>
                 <option v-for="input in inputs" :key="input.key" :value="input.key">
+                  {{ input.title || `Input ${input.number}` }} | #{{ input.number }} | {{ input.type }}
+                </option>
+              </select>
+              <i class="fas fa-chevron-down pointer-events-none absolute right-4 top-1/2 -translate-y-1/2 text-xs text-slate-400" />
+            </div>
+          </div>
+
+          <div v-if="form.ativo" class="col-span-12">
+            <label class="mb-2 block text-xs font-semibold uppercase tracking-[0.14em] text-slate-500">
+              Input LIST
+            </label>
+            <div class="relative">
+              <select
+                :value="form.inputLista?.key ?? ''"
+                class="w-full appearance-none rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 pr-10 text-sm font-medium text-slate-800 shadow-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100 disabled:cursor-not-allowed disabled:border-slate-200 disabled:bg-slate-100 disabled:text-slate-400"
+                :disabled="!form.ativo || carregandoInputs || inputsLista.length === 0"
+                @change="selecionarInputListaVmix"
+              >
+                <option value="">NÃO SELECIONADO</option>
+                <option v-for="input in inputsLista" :key="input.key" :value="input.key">
                   {{ input.title || `Input ${input.number}` }} | #{{ input.number }} | {{ input.type }}
                 </option>
               </select>

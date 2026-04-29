@@ -6,6 +6,7 @@ import {
 } from 'node:http'
 import { spawn, type ChildProcess } from 'node:child_process'
 import { existsSync } from 'node:fs'
+import { createConnection } from 'node:net'
 import { hostname } from 'node:os'
 import { join } from 'node:path'
 import { getStore } from '../store/store'
@@ -31,6 +32,18 @@ type VmixConfigIpc = {
     number: string
     title: string
     type: string
+  } | null
+  inputLista: {
+    key: string
+    number: string
+    title: string
+    type: string
+  } | null
+  itemListaSelecionado: {
+    index: number
+    title: string
+    value: string
+    selected: boolean
   } | null
   srt: {
     ativo: boolean
@@ -60,11 +73,14 @@ type GcApiConfigIpc = {
 
 const HOST_DEFAULT_IP = '127.0.0.1'
 const VMIX_DEFAULT_PORT = 8088
+const VMIX_TCP_PORT = 8099
 const SRT_DEFAULT_PORT = 9001
 const SRT_DEFAULT_NETWORK_CACHING_MS = 200
 const GC_API_DEFAULT_DEVICE_NAME = hostname().trim() || 'gc-desktop'
 
 type SrtConfigIpc = VmixConfigIpc['srt']
+type VmixInputIpc = NonNullable<VmixConfigIpc['inputSelecionado']>
+type VmixListItemIpc = NonNullable<VmixConfigIpc['itemListaSelecionado']>
 
 function getAppModeOverride(): 'HOST' | 'REMOTO' | null {
   if (__APP_MODE__ === 'HOST' || __APP_MODE__ === 'REMOTO') {
@@ -106,6 +122,22 @@ function normalizarConfigVmix(vmix?: Partial<VmixConfigIpc> | null): VmixConfigI
         type: String(vmix.inputSelecionadoCoberturas.type ?? '').trim()
       }
     : null
+  const inputLista = vmix?.inputLista
+    ? {
+        key: String(vmix.inputLista.key ?? '').trim(),
+        number: String(vmix.inputLista.number ?? '').trim(),
+        title: String(vmix.inputLista.title ?? '').trim(),
+        type: String(vmix.inputLista.type ?? '').trim()
+      }
+    : null
+  const itemListaSelecionado = vmix?.itemListaSelecionado
+    ? {
+        index: Number(vmix.itemListaSelecionado.index),
+        title: String(vmix.itemListaSelecionado.title ?? '').trim(),
+        value: String(vmix.itemListaSelecionado.value ?? '').trim(),
+        selected: Boolean(vmix.itemListaSelecionado.selected)
+      }
+    : null
 
   return {
     ativo: Boolean(vmix?.ativo),
@@ -113,6 +145,11 @@ function normalizarConfigVmix(vmix?: Partial<VmixConfigIpc> | null): VmixConfigI
     porta: Number.isInteger(porta) && porta > 0 ? porta : VMIX_DEFAULT_PORT,
     inputSelecionado,
     inputSelecionadoCoberturas,
+    inputLista,
+    itemListaSelecionado:
+      itemListaSelecionado && Number.isInteger(itemListaSelecionado.index) && itemListaSelecionado.index > 0
+        ? itemListaSelecionado
+        : null,
     srt: normalizarConfigSrt(vmix?.srt)
   }
 }
@@ -298,6 +335,42 @@ function getBundledExecutable(name: 'ffmpeg.exe') {
 
 function montarEndpointSrt(vmix: VmixConfigIpc) {
   return `srt://${vmix.ip}:${vmix.srt.porta}?timeout=5000000`
+}
+
+function decodificarXml(valor: string) {
+  return String(valor ?? '')
+    .replace(/&quot;/g, '"')
+    .replace(/&apos;/g, "'")
+    .replace(/&lt;/g, '<')
+    .replace(/&gt;/g, '>')
+    .replace(/&amp;/g, '&')
+}
+
+function limparTextoXml(valor: string) {
+  return decodificarXml(String(valor ?? '').replace(/<[^>]+>/g, '').trim())
+}
+
+function obterNomeArquivo(valor: string) {
+  const texto = String(valor ?? '').trim()
+  if (!texto) return ''
+
+  const semQuery = texto.split(/[?#]/)[0] ?? texto
+  const partes = semQuery.split(/[\\/]/).filter(Boolean)
+  const nome = partes[partes.length - 1] ?? semQuery
+
+  try {
+    return decodeURIComponent(nome)
+  } catch {
+    return nome
+  }
+}
+
+function normalizarBooleanXml(valor: string | undefined) {
+  if (valor === undefined) return null
+  const normalizado = String(valor).trim().toLowerCase()
+  if (['true', '1', 'yes', 'on', 'enabled', 'enable', 'checked', 'active'].includes(normalizado)) return true
+  if (['false', '0', 'no', 'off', 'disabled', 'disable', 'unchecked', 'inactive'].includes(normalizado)) return false
+  return null
 }
 
 async function aguardarInicializacaoPreview(processo: ChildProcess, timeoutMs = 5000): Promise<void> {
@@ -633,13 +706,350 @@ async function listarInputsVmix(config: Partial<VmixConfigIpc>) {
 
     inputs.push({
       number: String(attrs.number ?? ''),
-      title: String(attrs.title ?? ''),
+      title: decodificarXml(String(attrs.title ?? '')),
       type: String(attrs.type ?? ''),
       key: String(attrs.key ?? '')
     })
   }
 
   return inputs
+}
+
+async function obterXmlVmix(vmix: VmixConfigIpc) {
+  const response = await fetch(`http://${vmix.ip}:${vmix.porta}/api`)
+
+  if (!response.ok) {
+    throw new Error(`Falha ao consultar vMix API (${response.status}).`)
+  }
+
+  return response.text()
+}
+
+function extrairBlocosInputs(xml: string) {
+  const inputsMatch = xml.match(/<inputs[^>]*>([\s\S]*?)<\/inputs>/i)
+  if (!inputsMatch) return []
+
+  const blocos: Array<{ attrs: Record<string, string>; conteudo: string }> = []
+
+  for (const match of inputsMatch[1].matchAll(/<input\b([^>]*)>([\s\S]*?)<\/input>|<input\b([^>]*)\/>/gi)) {
+    blocos.push({
+      attrs: extrairAtributosXml(match[1] ?? match[3] ?? ''),
+      conteudo: match[2] ?? ''
+    })
+  }
+
+  return blocos
+}
+
+function inputCorresponde(attrs: Record<string, string>, input: VmixInputIpc) {
+  const key = String(input.key ?? '').trim()
+  const number = String(input.number ?? '').trim()
+  const title = String(input.title ?? '').trim()
+
+  return (
+    (key && attrs.key === key) ||
+    (number && attrs.number === number) ||
+    (title && attrs.title === title)
+  )
+}
+
+function obterBooleanPorNome(attrs: Record<string, string>, nomes: string[]) {
+  const nomesNormalizados = nomes.map((nome) => nome.toLowerCase().replace(/[^a-z0-9]/g, ''))
+
+  for (const [nome, valor] of Object.entries(attrs)) {
+    const nomeNormalizado = nome.toLowerCase().replace(/[^a-z0-9]/g, '')
+    if (nomesNormalizados.includes(nomeNormalizado)) {
+      const booleano = normalizarBooleanXml(valor)
+      if (booleano !== null) return booleano
+    }
+  }
+
+  return null
+}
+
+function nomePareceAutoNext(nome: string) {
+  const normalizado = nome.toLowerCase().replace(/[^a-z0-9]/g, '')
+  return normalizado.includes('auto') && normalizado.includes('next')
+}
+
+function obterBooleanTagXml(conteudo: string, nomes: string[]) {
+  for (const nome of nomes) {
+    const regex = new RegExp(`<${nome}\\b[^>]*>([\\s\\S]*?)<\\/${nome}>`, 'i')
+    const match = conteudo.match(regex)
+    if (!match) continue
+
+    const booleano = normalizarBooleanXml(limparTextoXml(match[1]))
+    if (booleano !== null) return booleano
+  }
+
+  return null
+}
+
+function obterBooleanAtributoInternoXml(conteudo: string, nomes: string[]) {
+  const nomesNormalizados = nomes.map((nome) => nome.toLowerCase().replace(/[^a-z0-9]/g, ''))
+
+  for (const match of conteudo.matchAll(/\b([a-z][a-z0-9_-]*)\s*=\s*["']([^"']*)["']/gi)) {
+    const nomeNormalizado = match[1].toLowerCase().replace(/[^a-z0-9]/g, '')
+    if (!nomesNormalizados.includes(nomeNormalizado) && !nomePareceAutoNext(match[1])) continue
+
+    const booleano = normalizarBooleanXml(match[2])
+    if (booleano !== null) return booleano
+  }
+
+  return null
+}
+
+function obterAutoPlayNextLista(bloco: { attrs: Record<string, string>; conteudo: string }) {
+  const nomes = ['autoPlayNext', 'autoplaynext', 'autoNext', 'autonext']
+
+  return (
+    obterBooleanPorNome(bloco.attrs, nomes) ??
+    obterBooleanPorNome(
+      Object.fromEntries(Object.entries(bloco.attrs).filter(([nome]) => nomePareceAutoNext(nome))),
+      Object.keys(bloco.attrs).filter((nome) => nomePareceAutoNext(nome))
+    ) ??
+    obterBooleanTagXml(bloco.conteudo, nomes) ??
+    obterBooleanAtributoInternoXml(bloco.conteudo, nomes)
+  )
+}
+
+function enviarComandoTcpVmix(
+  ip: string,
+  comando: string,
+  timeoutMs = 700
+): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const socket = createConnection({ host: ip, port: VMIX_TCP_PORT })
+    let buffer = ''
+    let concluido = false
+    const finalizar = (error?: Error) => {
+      if (concluido) return
+      concluido = true
+      socket.destroy()
+      if (error) {
+        reject(error)
+      } else {
+        resolve(buffer)
+      }
+    }
+    const timer = setTimeout(() => finalizar(new Error('Timeout ao consultar TCP API do vMix.')), timeoutMs)
+
+    socket.setEncoding('utf8')
+    socket.on('connect', () => {
+      socket.write(`${comando}\r\n`)
+    })
+    socket.on('data', (chunk) => {
+      buffer += chunk
+      if (buffer.includes('\r\n')) {
+        clearTimeout(timer)
+        finalizar()
+      }
+    })
+    socket.on('error', (error) => {
+      clearTimeout(timer)
+      finalizar(error)
+    })
+    socket.on('close', () => {
+      clearTimeout(timer)
+      if (!concluido) finalizar()
+    })
+  })
+}
+
+async function obterAutoPlayNextPorAtivador(vmix: VmixConfigIpc, input: VmixInputIpc) {
+  const numero = Number(input.number)
+  if (!Number.isInteger(numero) || numero <= 0) return null
+
+  const nomes = ['AutoPlayNext', 'AutoNext', 'ListAutoNext']
+
+  for (const nome of nomes) {
+    try {
+      const resposta = await enviarComandoTcpVmix(vmix.ip, `ACTS ${nome} ${numero}`)
+      const match = resposta.match(/ACTS\s+OK\s+\S+\s+\d+\s+(-?\d+(?:\.\d+)?)/i)
+      if (!match) continue
+
+      const valor = Number(match[1])
+      if (Number.isFinite(valor)) return valor > 0
+    } catch {
+      // Se o TCP API não estiver disponível, mantém o fallback do XML.
+    }
+  }
+
+  return null
+}
+
+async function listarItensListaVmix(config: Partial<VmixConfigIpc>, input: Partial<VmixInputIpc> | null) {
+  const vmix = normalizarConfigVmix(config)
+  const inputLista = input
+    ? {
+        key: String(input.key ?? '').trim(),
+        number: String(input.number ?? '').trim(),
+        title: String(input.title ?? '').trim(),
+        type: String(input.type ?? '').trim()
+      }
+    : null
+
+  if (!vmix.ativo) {
+    throw new Error('Ative o recurso do vMix para buscar a LIST.')
+  }
+
+  if (!vmix.ip) {
+    throw new Error('Informe o IP do vMix para buscar a LIST.')
+  }
+
+  if (!inputLista?.key && !inputLista?.number && !inputLista?.title) {
+    return []
+  }
+
+  const xml = await obterXmlVmix(vmix)
+  const bloco = extrairBlocosInputs(xml).find((item) => inputCorresponde(item.attrs, inputLista))
+  if (!bloco) return []
+
+  const itens: VmixListItemIpc[] = []
+  const selectedIndexAtributo = bloco.attrs.selectedIndex ? Number(bloco.attrs.selectedIndex) : NaN
+  const selectedIndexTagMatch = bloco.conteudo.match(/<selectedIndex\b[^>]*>([\s\S]*?)<\/selectedIndex>/i)
+  const selectedIndexTag = selectedIndexTagMatch ? Number(limparTextoXml(selectedIndexTagMatch[1])) : NaN
+  const selectedIndex = Number.isInteger(selectedIndexAtributo) ? selectedIndexAtributo : selectedIndexTag
+
+  for (const match of bloco.conteudo.matchAll(/<item\b([^>]*)>([\s\S]*?)<\/item>/gi)) {
+    const attrs = extrairAtributosXml(match[1])
+    const index = itens.length + 1
+    const value = limparTextoXml(match[2])
+    const title = obterNomeArquivo(value) || value || `Item ${index}`
+
+    itens.push({
+      index,
+      title,
+      value,
+      selected:
+        String(attrs.selected ?? '').toLowerCase() === 'true' ||
+        (Number.isInteger(selectedIndex) && (selectedIndex === index || selectedIndex === index - 1))
+    })
+  }
+
+  return itens
+}
+
+async function obterEstadoListaVmix(config: Partial<VmixConfigIpc>, input: Partial<VmixInputIpc> | null) {
+  const vmix = normalizarConfigVmix(config)
+  const inputLista = input
+    ? {
+        key: String(input.key ?? '').trim(),
+        number: String(input.number ?? '').trim(),
+        title: String(input.title ?? '').trim(),
+        type: String(input.type ?? '').trim()
+      }
+    : null
+
+  if (!vmix.ativo) {
+    throw new Error('Ative o recurso do vMix para buscar a LIST.')
+  }
+
+  if (!vmix.ip) {
+    throw new Error('Informe o IP do vMix para buscar a LIST.')
+  }
+
+  if (!inputLista?.key && !inputLista?.number && !inputLista?.title) {
+    return { items: [], autoPlayNext: null }
+  }
+
+  const xml = await obterXmlVmix(vmix)
+  const bloco = extrairBlocosInputs(xml).find((item) => inputCorresponde(item.attrs, inputLista))
+  if (!bloco) return { items: [], autoPlayNext: null }
+  const autoPlayNextXml = obterAutoPlayNextLista(bloco)
+  const autoPlayNextAtivador =
+    autoPlayNextXml === null ? await obterAutoPlayNextPorAtivador(vmix, inputLista) : null
+
+  return {
+    items: await listarItensListaVmix(vmix, inputLista),
+    autoPlayNext: autoPlayNextXml ?? autoPlayNextAtivador
+  }
+}
+
+async function selecionarItemListaVmix(
+  config: Partial<VmixConfigIpc>,
+  input: Partial<VmixInputIpc> | null,
+  item: Partial<VmixListItemIpc> | null
+) {
+  const vmix = normalizarConfigVmix(config)
+  const inputLista = input
+    ? {
+        key: String(input.key ?? '').trim(),
+        number: String(input.number ?? '').trim(),
+        title: String(input.title ?? '').trim(),
+        type: String(input.type ?? '').trim()
+      }
+    : null
+  const index = Number(item?.index)
+
+  if (!vmix.ativo) {
+    throw new Error('O recurso do vMix está desativado.')
+  }
+
+  if (!vmix.ip) {
+    throw new Error('Informe o IP do vMix.')
+  }
+
+  if (!inputLista?.key && !inputLista?.number && !inputLista?.title) {
+    throw new Error('Selecione um input LIST do vMix.')
+  }
+
+  if (!Number.isInteger(index) || index <= 0) {
+    throw new Error('Selecione um item da LIST.')
+  }
+
+  const url = new URL(`http://${vmix.ip}:${vmix.porta}/api/`)
+  url.searchParams.set('Function', 'SelectIndex')
+  url.searchParams.set('Input', inputLista.key || inputLista.number || inputLista.title)
+  url.searchParams.set('Value', String(index))
+
+  const response = await fetch(url.toString())
+
+  if (!response.ok) {
+    throw new Error(`Falha ao selecionar item da LIST no vMix (${response.status}).`)
+  }
+
+  return { ok: true }
+}
+
+async function definirAutoNextListaVmix(
+  config: Partial<VmixConfigIpc>,
+  input: Partial<VmixInputIpc> | null,
+  enabled: boolean
+) {
+  const vmix = normalizarConfigVmix(config)
+  const inputLista = input
+    ? {
+        key: String(input.key ?? '').trim(),
+        number: String(input.number ?? '').trim(),
+        title: String(input.title ?? '').trim(),
+        type: String(input.type ?? '').trim()
+      }
+    : null
+
+  if (!vmix.ativo) {
+    throw new Error('O recurso do vMix está desativado.')
+  }
+
+  if (!vmix.ip) {
+    throw new Error('Informe o IP do vMix.')
+  }
+
+  if (!inputLista?.key && !inputLista?.number && !inputLista?.title) {
+    throw new Error('Selecione um input LIST do vMix.')
+  }
+
+  const url = new URL(`http://${vmix.ip}:${vmix.porta}/api/`)
+  url.searchParams.set('Function', enabled ? 'AutoPlayNextOn' : 'AutoPlayNextOff')
+  url.searchParams.set('Input', inputLista.key || inputLista.number || inputLista.title)
+
+  const response = await fetch(url.toString())
+
+  if (!response.ok) {
+    throw new Error(`Falha ao alterar AutoNext da LIST no vMix (${response.status}).`)
+  }
+
+  return { ok: true }
 }
 
 async function acionarOverlayVmix(config: Partial<VmixConfigIpc>) {
@@ -761,7 +1171,9 @@ export function registrarIpcConfig() {
         porta: normalizarConfigVmix(vmix).porta,
         ativo: Boolean(vmix.ativo),
         inputSelecionado: normalizarConfigVmix(vmix).inputSelecionado,
-        inputSelecionadoCoberturas: normalizarConfigVmix(vmix).inputSelecionadoCoberturas
+        inputSelecionadoCoberturas: normalizarConfigVmix(vmix).inputSelecionadoCoberturas,
+        inputLista: normalizarConfigVmix(vmix).inputLista,
+        itemListaSelecionado: normalizarConfigVmix(vmix).itemListaSelecionado
       })
       store.set('srtRemoto', srt)
       return
@@ -786,6 +1198,44 @@ export function registrarIpcConfig() {
   ipcMain.handle('config:listarInputsVmix', async (_evt, vmix: Partial<VmixConfigIpc>) => {
     return listarInputsVmix(vmix)
   })
+
+  ipcMain.handle(
+    'config:listarItensListaVmix',
+    async (_evt, vmix: Partial<VmixConfigIpc>, input: Partial<VmixInputIpc> | null) => {
+      return listarItensListaVmix(vmix, input)
+    }
+  )
+
+  ipcMain.handle(
+    'config:obterEstadoListaVmix',
+    async (_evt, vmix: Partial<VmixConfigIpc>, input: Partial<VmixInputIpc> | null) => {
+      return obterEstadoListaVmix(vmix, input)
+    }
+  )
+
+  ipcMain.handle(
+    'config:selecionarItemListaVmix',
+    async (
+      _evt,
+      vmix: Partial<VmixConfigIpc>,
+      input: Partial<VmixInputIpc> | null,
+      item: Partial<VmixListItemIpc> | null
+    ) => {
+      return selecionarItemListaVmix(vmix, input, item)
+    }
+  )
+
+  ipcMain.handle(
+    'config:definirAutoNextListaVmix',
+    async (
+      _evt,
+      vmix: Partial<VmixConfigIpc>,
+      input: Partial<VmixInputIpc> | null,
+      enabled: boolean
+    ) => {
+      return definirAutoNextListaVmix(vmix, input, Boolean(enabled))
+    }
+  )
 
   ipcMain.handle('config:acionarOverlayVmix', async (_evt, vmix: Partial<VmixConfigIpc>) => {
     return acionarOverlayVmix(vmix)

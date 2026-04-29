@@ -534,7 +534,7 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="min-h-screen bg-slate-800 text-slate-900">
+  <div class="min-h-screen bg-slate-100 text-slate-900 dark:bg-slate-950 dark:text-slate-100">
     <BaseToast ref="toastRef" />
     <AnimalModal
       :aberto="modalNovoAnimalAberto"
@@ -545,24 +545,24 @@ onUnmounted(() => {
       @fechar="fecharModalNovoAnimal"
       @salvar="salvarNovoAnimal"
     />
-    <div class="sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur">
+    <div class="sticky top-0 z-20 border-b border-slate-200 bg-white/95 backdrop-blur dark:border-slate-800 dark:bg-slate-950/95">
       <div class="flex flex-col gap-4 px-5 py-4 lg:px-7">
         <div class="flex flex-wrap items-start justify-between gap-3">
           <div>
             <div class="text-xs font-semibold uppercase tracking-[0.18em] text-blue-700">
               Modo Conferência
             </div>
-            <h1 class="mt-1 text-2xl font-black text-slate-900">{{ tituloLeilao }}</h1>
-            <div class="mt-2 flex flex-wrap gap-2 text-xs font-medium text-slate-600">
-              <span class="rounded-full bg-slate-100 px-3 py-1">
+            <h1 class="mt-1 text-2xl font-black text-slate-900 dark:text-slate-100">{{ tituloLeilao }}</h1>
+            <div class="mt-2 flex flex-wrap gap-2 text-xs font-medium text-slate-600 dark:text-slate-300">
+              <span class="rounded-full border border-slate-200 bg-slate-100 px-3 py-1 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-200">
                 {{ linhas.length }} animal(is)
               </span>
-              <span class="rounded-full bg-amber-100 px-3 py-1 text-amber-800">
+              <span class="rounded-full border border-amber-200 bg-amber-100 px-3 py-1 text-amber-800 dark:border-amber-800 dark:bg-amber-950 dark:text-amber-200">
                 {{ totalSujo }} com alteração
               </span>
               <span
                 v-if="totalConflitos > 0"
-                class="rounded-full bg-rose-100 px-3 py-1 text-rose-800"
+                class="rounded-full border border-rose-200 bg-rose-100 px-3 py-1 text-rose-800 dark:border-rose-800 dark:bg-rose-950 dark:text-rose-200"
               >
                 {{ totalConflitos }} com conflito externo
               </span>
@@ -581,7 +581,7 @@ onUnmounted(() => {
         <input
           v-model="busca"
           type="text"
-          class="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800 outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100"
+          class="w-full rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800 outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-900 dark:text-slate-100 dark:placeholder:text-slate-500 dark:focus:bg-slate-950 dark:focus:ring-blue-950"
           placeholder="Buscar por lote ou nome..."
           @input="busca = normalizarTexto(busca)"
         />
@@ -590,7 +590,7 @@ onUnmounted(() => {
     </div>
 
     <div class="px-6 py-6 lg:px-8 lg:py-8">
-      <div v-if="carregando" class="rounded-3xl border border-slate-200 bg-white p-10 text-center text-slate-500">
+      <div v-if="carregando" class="rounded-3xl border border-slate-200 bg-white p-10 text-center text-slate-500 dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400">
         Carregando animais...
       </div>
 
@@ -599,10 +599,10 @@ onUnmounted(() => {
           v-for="linha in linhasFiltradas"
           :id="`animal-rapido-${linha.id}`"
           :key="linha.id"
-          class="rounded-3xl border bg-white p-4 shadow-sm"
+          class="rounded-3xl border bg-white p-4 shadow-sm dark:bg-slate-900"
           :class="[
-            linhaEstaSuja(linha) ? 'border-amber-200 bg-amber-50/40' : 'border-slate-200',
-            linha.conflitoExterno ? 'ring-1 ring-inset ring-rose-200' : ''
+            linhaEstaSuja(linha) ? 'border-amber-200 bg-amber-50/40 dark:border-amber-800 dark:bg-amber-950/30' : 'border-slate-200 dark:border-slate-800',
+            linha.conflitoExterno ? 'ring-1 ring-inset ring-rose-200 dark:ring-rose-800' : ''
           ]"
         >
           <div class="flex flex-wrap items-start justify-between gap-3">
@@ -800,15 +800,15 @@ onUnmounted(() => {
 
       <div
         v-else
-        class="rounded-3xl border border-slate-200 bg-white p-10 text-center text-slate-500 shadow-sm"
+        class="rounded-3xl border border-slate-200 bg-white p-10 text-center text-slate-500 shadow-sm dark:border-slate-800 dark:bg-slate-900 dark:text-slate-400"
       >
         Nenhum animal encontrado.
       </div>
     </div>
 
-    <div class="sticky bottom-0 z-20 border-t border-slate-200 bg-white/95 px-5 py-4 backdrop-blur lg:px-7">
+    <div class="sticky bottom-0 z-20 border-t border-slate-200 bg-white/95 px-5 py-4 backdrop-blur dark:border-slate-800 dark:bg-slate-950/95 lg:px-7">
       <div class="flex flex-wrap items-center justify-between gap-3">
-        <div class="text-sm text-slate-600">
+        <div class="text-sm text-slate-600 dark:text-slate-300">
           {{ totalSujo }} linha(s) com alteração pendente.
         </div>
 
@@ -843,6 +843,18 @@ onUnmounted(() => {
   border-color: rgb(96 165 250);
   background: white;
   box-shadow: 0 0 0 4px rgb(219 234 254);
+}
+
+:global(html.dark .campo-grid) {
+  border-color: rgb(51 65 85);
+  background: rgb(15 23 42) !important;
+  color: rgb(241 245 249) !important;
+}
+
+:global(html.dark .campo-grid:focus) {
+  border-color: rgb(59 130 246);
+  background: rgb(2 6 23) !important;
+  box-shadow: 0 0 0 4px rgb(23 37 84);
 }
 
 </style>
