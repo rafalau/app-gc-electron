@@ -122,6 +122,13 @@ const gerenciarItems = computed(() => {
       }
     },
     {
+      label: 'Ordem de Entrada',
+      icon: 'fa-list-ol',
+      action: () => {
+        abrirOrdemEntrada()
+      }
+    },
+    {
       label: 'Painel de Preço',
       icon: 'fa-money-bill-wave',
       action: () => {
@@ -226,6 +233,10 @@ function moverApiProvider(index: number, direction: 'up' | 'down') {
   const [item] = next.splice(index, 1)
   next.splice(targetIndex, 0, item)
   apiProvidersDraft.value = next
+}
+
+function abrirOrdemEntrada() {
+  void window.janela.abrirOrdemEntrada(leilaoId)
 }
 
 function abrirModoOperacao(animal?: Animal) {

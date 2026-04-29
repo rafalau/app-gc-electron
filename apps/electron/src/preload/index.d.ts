@@ -8,6 +8,7 @@ export type Leilao = {
   usa_dolar: boolean
   cotacao: number | null
   multiplicador: number
+  ordenacao_animais: 'LOTE' | 'ENTRADA'
   total_animais: number
   gc_sync_status?: 'success' | 'error' | null
   gc_sync_at?: string | null
@@ -23,6 +24,7 @@ export type LeilaoCriarPayload = {
   usa_dolar: boolean
   cotacao: number | null
   multiplicador: number
+  ordenacao_animais?: 'LOTE' | 'ENTRADA'
 }
 
 export type LeilaoAtualizarPayload = Partial<LeilaoCriarPayload>
@@ -30,6 +32,7 @@ export type LeilaoAtualizarPayload = Partial<LeilaoCriarPayload>
 export type Animal = {
   id: string
   leilao_id: string
+  ordem: number
   lote: string
   nome: string
   categoria: string
@@ -50,6 +53,7 @@ export type Animal = {
 
 export type AnimalCriarPayload = {
   leilao_id: string
+  ordem?: number
   lote: string
   nome: string
   categoria: string
@@ -319,6 +323,7 @@ declare global {
       abrirEditorAnimalOperacao: (leilaoId: string, animalId?: string) => Promise<void>
       abrirPainelPrecoOperacao: (leilaoId: string) => Promise<void>
       abrirConfiguracaoVmixOperacao: (leilaoId: string) => Promise<void>
+      abrirOrdemEntrada: (leilaoId: string) => Promise<void>
       abrirEditorLeilaoRemoto: (leilaoId: string) => Promise<void>
       abrirEditorAnimalRemoto: (leilaoId: string, animalId: string) => Promise<void>
       abrirConfiguracaoAnimaisRemoto: (leilaoId: string) => Promise<void>

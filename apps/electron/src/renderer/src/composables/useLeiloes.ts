@@ -12,12 +12,40 @@ import { obterConexaoOperacao } from '../services/operacao.service'
 export type AbaLeiloes = 'ATIVOS' | 'ARQUIVADOS'
 export type ModalLeilaoModo = 'CRIAR' | 'EDITAR'
 
-function hojeISO() {
-  return new Date().toISOString().slice(0, 10)
+function pad2(value: number) {
+  return String(value).padStart(2, '0')
 }
 
-function isArquivado(dataISO: string) {
-  return dataISO < hojeISO()
+function hojeISO() {
+  const hoje = new Date()
+  return `${hoje.getFullYear()}-${pad2(hoje.getMonth() + 1)}-${pad2(hoje.getDate())}`
+}
+
+function parseDataISO(dataISO: string) {
+  const [ano, mes, dia] = dataISO.split('-').map(Number)
+  if (!ano || !mes || !dia) return null
+  return new Date(ano, mes - 1, dia)
+}
+
+function getDataArquivamento(dataISO: string) {
+  const dataEvento = parseDataISO(dataISO)
+  if (!dataEvento) return null
+
+  return new Date(
+    dataEvento.getFullYear(),
+    dataEvento.getMonth(),
+    dataEvento.getDate() + 1,
+    3,
+    0,
+    0,
+    0
+  )
+}
+
+function isArquivado(dataISO: string, agora = new Date()) {
+  const dataArquivamento = getDataArquivamento(dataISO)
+  if (!dataArquivamento) return false
+  return agora.getTime() >= dataArquivamento.getTime()
 }
 
 export function useLeiloes() {
@@ -25,12 +53,14 @@ export function useLeiloes() {
   const leiloes = ref<Leilao[]>([])
   const aba = ref<AbaLeiloes>('ATIVOS')
   const busca = ref('')
+  const agora = ref(new Date())
 
   const modalAberto = ref(false)
   const modalModo = ref<ModalLeilaoModo>('CRIAR')
   const editandoId = ref<string | null>(null)
   const erroModal = ref('')
   let eventSource: EventSource | null = null
+  let relogioTimer: number | null = null
 
   function erroDeConexaoRemota(error: unknown) {
     const message = (error as Error)?.message ?? ''
@@ -67,9 +97,11 @@ export function useLeiloes() {
 
   const leiloesFiltrados = computed(() => {
     const termo = busca.value.trim().toLowerCase()
+    const dataAtual = agora.value
 
     const filtrados = leiloes.value.filter((l) => {
-      const porAba = aba.value === 'ATIVOS' ? !isArquivado(l.data) : isArquivado(l.data)
+      const arquivado = isArquivado(l.data, dataAtual)
+      const porAba = aba.value === 'ATIVOS' ? !arquivado : arquivado
       if (!porAba) return false
       if (!termo) return true
       return l.titulo_evento.toLowerCase().includes(termo) || l.data.includes(termo)
@@ -163,6 +195,11 @@ export function useLeiloes() {
   }
 
   onMounted(carregar)
+  onMounted(() => {
+    relogioTimer = window.setInterval(() => {
+      agora.value = new Date()
+    }, 60_000)
+  })
   onMounted(async () => {
     try {
       const conexao = await obterConexaoOperacao()
@@ -184,6 +221,11 @@ export function useLeiloes() {
     }
   })
   onUnmounted(() => {
+    if (relogioTimer !== null) {
+      window.clearInterval(relogioTimer)
+      relogioTimer = null
+    }
+
     if (eventSource) {
       eventSource.close()
       eventSource = null

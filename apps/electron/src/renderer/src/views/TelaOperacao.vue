@@ -44,7 +44,7 @@ const SRT_DEFAULT_PORT = 9001
 const SRT_RECONNECT_MAX_TENTATIVAS = 10
 const INTERVALO_COMPOSTO_PADRAO = 10
 const VMIX_LIST_SYNC_INTERVAL_MS = 1500
-const AJUSTES_LANCE_RAPIDO = [10, 20, 30, 50, 100, 500] as const
+const AJUSTES_LANCE_RAPIDO = [5, 10, 20, 30, 50, 100, 500] as const
 
 const router = useRouter()
 const route = useRoute()
@@ -117,21 +117,46 @@ const formVmix = ref<VmixConfig>({
 const animalSelecionado = computed(
   () => animais.value.find((animal) => animal.id === animalSelecionadoId.value) ?? null
 )
+const animaisOrdenadosOperacao = computed(() => {
+  const lista = [...animais.value]
+
+  if (leilao.value?.ordenacao_animais !== 'ENTRADA') return lista
+
+  return lista.sort((a, b) => {
+    const ordemA = Number(a.ordem)
+    const ordemB = Number(b.ordem)
+    const temOrdemA = Number.isInteger(ordemA) && ordemA > 0
+    const temOrdemB = Number.isInteger(ordemB) && ordemB > 0
+
+    if (temOrdemA && temOrdemB && ordemA !== ordemB) return ordemA - ordemB
+    if (temOrdemA && !temOrdemB) return -1
+    if (!temOrdemA && temOrdemB) return 1
+    return 0
+  })
+})
 const animaisSelecionadosCompostos = computed(() => {
   const ids = new Set(animaisSelecionadosIds.value)
-  return animais.value.filter((animal) => ids.has(animal.id))
+  return animaisOrdenadosOperacao.value.filter((animal) => ids.has(animal.id))
 })
 const animaisFiltradosOperacao = computed(() => {
   const termo = buscaAnimal.value.trim().toLowerCase()
-  if (!termo) return animais.value
+  if (!termo) return animaisOrdenadosOperacao.value
 
-  return animais.value.filter((animal) =>
+  return animaisOrdenadosOperacao.value.filter((animal) =>
     [animal.lote, animal.nome]
       .join(' ')
       .toLowerCase()
       .includes(termo)
   )
 })
+const indiceAnimalSelecionadoOperacao = computed(() =>
+  animaisOrdenadosOperacao.value.findIndex((animal) => animal.id === animalSelecionadoId.value)
+)
+const podeVoltarAnimalOperacao = computed(() => indiceAnimalSelecionadoOperacao.value > 0)
+const podeAvancarAnimalOperacao = computed(() =>
+  indiceAnimalSelecionadoOperacao.value >= 0 &&
+  indiceAnimalSelecionadoOperacao.value < animaisOrdenadosOperacao.value.length - 1
+)
 const resumoSelecaoOperacao = computed(() => {
   if (modoSelecaoOperacao.value === 'SIMPLES') {
     return animalSelecionado.value
@@ -253,11 +278,11 @@ function normalizarIdsAnimaisSelecionados(ids: string[]) {
     )
   )
 
-  if (animais.value.length === 0) {
+  if (animaisOrdenadosOperacao.value.length === 0) {
     return idsBase
   }
 
-  const indicePorId = new Map(animais.value.map((animal, index) => [animal.id, index]))
+  const indicePorId = new Map(animaisOrdenadosOperacao.value.map((animal, index) => [animal.id, index]))
 
   return idsBase
     .filter((id) => indicePorId.has(id))
@@ -941,13 +966,21 @@ function selecionarAnimalOperacao(animalId: string) {
   definirAnimalSelecionado(animalId)
 }
 
+function navegarAnimalOperacao(direcao: -1 | 1) {
+  const indiceAtual = indiceAnimalSelecionadoOperacao.value
+  const proximoAnimal = indiceAtual >= 0 ? animaisOrdenadosOperacao.value[indiceAtual + direcao] : null
+  if (!proximoAnimal) return
+
+  definirAnimalSelecionado(proximoAnimal.id)
+}
+
 function definirModoSelecaoOperacao(modo: OperacaoSelecaoModo) {
   if (modoSelecaoOperacao.value === modo) return
 
   modoSelecaoOperacao.value = modo
 
   if (modo === 'COMPOSTO') {
-    const animalBase = animalSelecionadoId.value || animais.value[0]?.id || ''
+    const animalBase = animalSelecionadoId.value || animaisOrdenadosOperacao.value[0]?.id || ''
     animaisSelecionadosIds.value = animalBase ? [animalBase] : []
     sincronizarSelecaoCompostaLocal()
     void sincronizarArquivo()
@@ -957,7 +990,7 @@ function definirModoSelecaoOperacao(modo: OperacaoSelecaoModo) {
   }
 
   limparRotacaoComposta()
-  const animalBase = animalSelecionadoId.value || animais.value[0]?.id || ''
+  const animalBase = animalSelecionadoId.value || animaisOrdenadosOperacao.value[0]?.id || ''
   if (animalBase) {
     definirAnimalSelecionado(animalBase, { preservarLances: true })
   } else {
@@ -1088,7 +1121,7 @@ async function sincronizarArquivo() {
 }
 
 watch(
-  animais,
+  animaisOrdenadosOperacao,
   (lista) => {
     if (lista.length === 0) {
       animaisSelecionadosIds.value = []
@@ -1819,16 +1852,36 @@ onUnmounted(() => {
             </div>
           </div>
 
-          <input
-            ref="inputLanceRef"
-            v-model="lanceDigitado"
-            class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-center text-2xl font-bold text-slate-900 shadow-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:bg-slate-900 dark:focus:ring-blue-950"
-            type="text"
-            inputmode="decimal"
-            placeholder="Digite o lance"
-            @input="atualizarDigitacaoLance"
-            @keydown.enter.prevent="enviarLance"
-          />
+          <div class="grid w-full grid-cols-[3rem_minmax(0,1fr)_3rem] gap-2">
+            <button
+              type="button"
+              class="inline-flex h-full min-h-14 items-center justify-center rounded-xl border border-slate-300 bg-white text-2xl font-black leading-none text-slate-700 shadow-sm transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200 dark:hover:border-blue-700 dark:hover:bg-slate-900 dark:hover:text-blue-300"
+              :disabled="!podeVoltarAnimalOperacao"
+              title="Animal anterior"
+              @click="navegarAnimalOperacao(-1)"
+            >
+              <i class="fas fa-chevron-left" />
+            </button>
+            <input
+              ref="inputLanceRef"
+              v-model="lanceDigitado"
+              class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-center text-2xl font-bold text-slate-900 shadow-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-100 dark:focus:bg-slate-900 dark:focus:ring-blue-950"
+              type="text"
+              inputmode="decimal"
+              placeholder="Digite o lance"
+              @input="atualizarDigitacaoLance"
+              @keydown.enter.prevent="enviarLance"
+            />
+            <button
+              type="button"
+              class="inline-flex h-full min-h-14 items-center justify-center rounded-xl border border-slate-300 bg-white text-2xl font-black leading-none text-slate-700 shadow-sm transition hover:border-blue-300 hover:bg-blue-50 hover:text-blue-700 disabled:cursor-not-allowed disabled:opacity-40 dark:border-slate-700 dark:bg-slate-950 dark:text-slate-200 dark:hover:border-blue-700 dark:hover:bg-slate-900 dark:hover:text-blue-300"
+              :disabled="!podeAvancarAnimalOperacao"
+              title="Próximo animal"
+              @click="navegarAnimalOperacao(1)"
+            >
+              <i class="fas fa-chevron-right" />
+            </button>
+          </div>
 
           <div class="flex w-full gap-1">
             <button

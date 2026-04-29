@@ -75,7 +75,8 @@ async function carregarJanelaOperacao(
     | 'operation-auction-editor'
     | 'operation-animal-editor'
     | 'operation-price-panel'
-    | 'operation-vmix-editor',
+    | 'operation-vmix-editor'
+    | 'operation-entry-order',
   queryParams: Record<string, string>
 ) {
   const conexao = await getModoConexaoOperacao()
@@ -350,6 +351,44 @@ export function registrarIpcJanela() {
     janelasOperacao.set(chave, win)
     await carregarJanelaOperacao(win, 'operation-vmix-editor', { leilaoId })
     await fechado
+  })
+
+  ipcMain.handle('janela:abrirOrdemEntrada', async (event, leilaoId: string) => {
+    const parent = BrowserWindow.fromWebContents(event.sender)
+    const chave = `entry-order:${leilaoId}`
+    const existente = janelasOperacao.get(chave)
+
+    if (existente && !existente.isDestroyed()) {
+      await carregarJanelaOperacao(existente, 'operation-entry-order', { leilaoId })
+      existente.show()
+      existente.focus()
+      return
+    }
+
+    const win = new BrowserWindow({
+      width: 980,
+      height: 720,
+      minWidth: 780,
+      minHeight: 560,
+      show: false,
+      autoHideMenuBar: false,
+      webPreferences: {
+        preload: getPreloadPath(),
+        sandbox: false
+      }
+    })
+
+    win.on('ready-to-show', () => {
+      centralizarNaTela(win, parent)
+      win.show()
+    })
+
+    win.on('closed', () => {
+      janelasOperacao.delete(chave)
+    })
+
+    janelasOperacao.set(chave, win)
+    await carregarJanelaOperacao(win, 'operation-entry-order', { leilaoId })
   })
 
   ipcMain.handle('janela:abrirEditorLeilaoRemoto', async (event, leilaoId: string) => {

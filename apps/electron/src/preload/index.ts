@@ -8,12 +8,14 @@ type LeilaoCriarPayload = {
   usa_dolar: boolean
   cotacao: number | null
   multiplicador: number
+  ordenacao_animais?: 'LOTE' | 'ENTRADA'
 }
 
 type LeilaoAtualizarPayload = Partial<LeilaoCriarPayload>
 
 type AnimalCriarPayload = {
   leilao_id: string
+  ordem?: number
   lote: string
   nome: string
   categoria: string
@@ -43,6 +45,7 @@ type Leilao = {
   usa_dolar: boolean
   cotacao: number | null
   multiplicador: number
+  ordenacao_animais: 'LOTE' | 'ENTRADA'
   total_animais: number
   gc_sync_status?: 'success' | 'error' | null
   gc_sync_at?: string | null
@@ -54,6 +57,7 @@ type Leilao = {
 type Animal = {
   id: string
   leilao_id: string
+  ordem: number
   lote: string
   nome: string
   categoria: string
@@ -280,6 +284,7 @@ const janelaApi = {
     ipcRenderer.invoke('janela:abrirPainelPrecoOperacao', leilaoId),
   abrirConfiguracaoVmixOperacao: (leilaoId: string) =>
     ipcRenderer.invoke('janela:abrirConfiguracaoVmixOperacao', leilaoId),
+  abrirOrdemEntrada: (leilaoId: string) => ipcRenderer.invoke('janela:abrirOrdemEntrada', leilaoId),
   abrirEditorLeilaoRemoto: (leilaoId: string) =>
     ipcRenderer.invoke('janela:abrirEditorLeilaoRemoto', leilaoId),
   abrirEditorAnimalRemoto: (leilaoId: string, animalId: string) =>

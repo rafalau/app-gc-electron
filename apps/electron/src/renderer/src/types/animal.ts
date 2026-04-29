@@ -5,6 +5,7 @@ export type CategoriaAnimal = (typeof CATEGORIAS_ANIMAL)[number]
 export type Animal = {
   id: string
   leilao_id: string
+  ordem: number
   lote: string
   nome: string
   categoria: string
@@ -25,6 +26,7 @@ export type Animal = {
 
 export type AnimalCriarPayload = {
   leilao_id: string
+  ordem?: number
   lote: string
   nome: string
   categoria: string

@@ -51,6 +51,19 @@ function ensureAnimalAlturaColumn(sqlitePath: string) {
     if (!hasAltura) {
       db.exec(`ALTER TABLE "Animal" ADD COLUMN "altura" TEXT NOT NULL DEFAULT ''`)
     }
+
+    const leilaoTable = db
+      .prepare(`SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'Leilao' LIMIT 1`)
+      .get() as { name?: string } | undefined
+
+    if (!leilaoTable?.name) return
+
+    const leilaoColumns = db.prepare(`PRAGMA table_info("Leilao")`).all() as Array<{ name?: string }>
+    const hasOrdenacaoAnimais = leilaoColumns.some((column) => column.name === 'ordenacao_animais')
+
+    if (!hasOrdenacaoAnimais) {
+      db.exec(`ALTER TABLE "Leilao" ADD COLUMN "ordenacao_animais" TEXT NOT NULL DEFAULT 'LOTE'`)
+    }
   } finally {
     db.close()
   }

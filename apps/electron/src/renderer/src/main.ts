@@ -37,6 +37,8 @@ async function bootstrap() {
               ? createApp((await import('./views/TelaPainelPrecoOperacao.vue')).default)
             : windowMode === 'operation-vmix-editor'
               ? createApp((await import('./views/TelaOperacaoConfigurarVmixJanela.vue')).default)
+            : windowMode === 'operation-entry-order'
+              ? createApp((await import('./views/TelaOrdemEntradaJanela.vue')).default)
               : windowMode === 'remote-auction-editor'
                 ? createApp((await import('./views/TelaRemotoEditarLeilaoJanela.vue')).default)
                 : windowMode === 'remote-animal-editor'

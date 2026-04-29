@@ -1,0 +1,1 @@
+ALTER TABLE "Leilao" ADD COLUMN "ordenacao_animais" TEXT NOT NULL DEFAULT 'LOTE';

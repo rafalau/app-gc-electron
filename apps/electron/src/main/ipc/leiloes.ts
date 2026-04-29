@@ -15,12 +15,17 @@ type LeilaoCriarPayload = {
   usa_dolar: boolean
   cotacao: number | null
   multiplicador: number
+  ordenacao_animais?: string
 }
 
 type LeilaoAtualizarPayload = Partial<LeilaoCriarPayload>
 
 function upper(value?: string | null) {
   return String(value ?? '').trim().toUpperCase()
+}
+
+function normalizarOrdenacaoAnimais(value?: string | null) {
+  return upper(value) === 'ENTRADA' ? 'ENTRADA' : 'LOTE'
 }
 
 type GcApiLeilaoSyncState = {
@@ -34,7 +39,8 @@ function normalizarPayloadCriar(payload: LeilaoCriarPayload): LeilaoCriarPayload
   return {
     ...payload,
     titulo_evento: upper(payload.titulo_evento),
-    condicoes_de_pagamento: upper(payload.condicoes_de_pagamento)
+    condicoes_de_pagamento: upper(payload.condicoes_de_pagamento),
+    ordenacao_animais: normalizarOrdenacaoAnimais(payload.ordenacao_animais)
   }
 }
 
@@ -44,6 +50,9 @@ function normalizarPayloadAtualizar(payload: LeilaoAtualizarPayload): LeilaoAtua
     ...(payload.titulo_evento !== undefined ? { titulo_evento: upper(payload.titulo_evento) } : {}),
     ...(payload.condicoes_de_pagamento !== undefined
       ? { condicoes_de_pagamento: upper(payload.condicoes_de_pagamento) }
+      : {}),
+    ...(payload.ordenacao_animais !== undefined
+      ? { ordenacao_animais: normalizarOrdenacaoAnimais(payload.ordenacao_animais) }
       : {})
   }
 }
@@ -51,6 +60,7 @@ function normalizarPayloadAtualizar(payload: LeilaoAtualizarPayload): LeilaoAtua
 function serializar(leilao: any, gcSync?: GcApiLeilaoSyncState | null) {
   return {
     ...leilao,
+    ordenacao_animais: normalizarOrdenacaoAnimais(leilao.ordenacao_animais),
     total_animais: leilao.total_animais ?? 0,
     gc_sync_status: gcSync?.status ?? null,
     gc_sync_at: gcSync?.lastSyncedAt ?? null,
@@ -122,7 +132,8 @@ export async function criarLeilaoLocal(payload: LeilaoCriarPayload) {
       condicoes_de_pagamento: payloadNormalizado.condicoes_de_pagamento ?? '',
       usa_dolar: payloadNormalizado.usa_dolar ?? false,
       cotacao: payloadNormalizado.cotacao,
-      multiplicador: payloadNormalizado.multiplicador
+      multiplicador: payloadNormalizado.multiplicador,
+      ordenacao_animais: payloadNormalizado.ordenacao_animais ?? 'LOTE'
     }
   })
   return serializar(leilao)
@@ -147,6 +158,9 @@ export async function atualizarLeilaoLocal(id: string, payload: LeilaoAtualizarP
       ...(payloadNormalizado.cotacao !== undefined ? { cotacao: payloadNormalizado.cotacao } : {}),
       ...(payloadNormalizado.multiplicador !== undefined
         ? { multiplicador: payloadNormalizado.multiplicador }
+        : {}),
+      ...(payloadNormalizado.ordenacao_animais !== undefined
+        ? { ordenacao_animais: payloadNormalizado.ordenacao_animais }
         : {}),
       atualizado_em: new Date()
     }

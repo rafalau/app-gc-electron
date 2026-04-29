@@ -10,6 +10,7 @@ import {
 
 type AnimalCriarPayload = {
   leilao_id: string
+  ordem?: number
   lote: string
   nome: string
   categoria: string
@@ -63,9 +64,15 @@ function normalizeVendedor(value?: string | null) {
   return `VENDEDOR: ${texto}`
 }
 
+function normalizarOrdem(value?: number | string | null) {
+  const numero = Number(value)
+  return Number.isInteger(numero) && numero > 0 ? numero : 0
+}
+
 function normalizarPayloadCriar(payload: AnimalCriarPayload): AnimalCriarPayload {
   return {
     ...payload,
+    ordem: normalizarOrdem(payload.ordem),
     lote: upper(payload.lote),
     nome: upper(payload.nome),
     categoria: upper(payload.categoria || 'ANIMAIS'),
@@ -86,6 +93,7 @@ function normalizarPayloadCriar(payload: AnimalCriarPayload): AnimalCriarPayload
 function normalizarPayloadAtualizar(payload: AnimalAtualizarPayload): AnimalAtualizarPayload {
   return {
     ...payload,
+    ...(payload.ordem !== undefined ? { ordem: normalizarOrdem(payload.ordem) } : {}),
     ...(payload.lote !== undefined ? { lote: upper(payload.lote) } : {}),
     ...(payload.nome !== undefined ? { nome: upper(payload.nome) } : {}),
     ...(payload.categoria !== undefined ? { categoria: upper(payload.categoria) } : {}),
@@ -205,6 +213,7 @@ function serializar(animal: any) {
 
   return {
     ...animal,
+    ordem: normalizarOrdem(animal.ordem),
     vendedor: animal.proprietario ?? '',
     condicoes_pagamento_especificas: animal.condicoes_pagamento_especificas ?? '',
     raca: animal.raca ?? '',
@@ -227,6 +236,7 @@ export async function listarAnimaisPorLeilaoLocal(leilaoId: string) {
       SELECT
         id,
         leilao_id,
+        ordem,
         lote,
         nome,
         categoria,
@@ -264,6 +274,7 @@ export async function criarAnimalLocal(payload: AnimalCriarPayload) {
       INSERT INTO Animal (
         id,
         leilao_id,
+        ordem,
         lote,
         nome,
         categoria,
@@ -280,10 +291,11 @@ export async function criarAnimalLocal(payload: AnimalCriarPayload) {
         condicoes_cobertura,
         criado_em,
         atualizado_em
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
     `,
     id,
     payloadNormalizado.leilao_id,
+    payloadNormalizado.ordem ?? 0,
     payloadNormalizado.lote,
     payloadNormalizado.nome,
     payloadNormalizado.categoria ?? 'ANIMAIS',
@@ -307,6 +319,7 @@ export async function criarAnimalLocal(payload: AnimalCriarPayload) {
       SELECT
         id,
         leilao_id,
+        ordem,
         lote,
         nome,
         categoria,
@@ -342,6 +355,7 @@ export async function atualizarAnimalLocal(id: string, payload: AnimalAtualizarP
       UPDATE Animal
       SET
         lote = COALESCE(?, lote),
+        ordem = COALESCE(?, ordem),
         nome = COALESCE(?, nome),
         categoria = COALESCE(?, categoria),
         proprietario = COALESCE(?, proprietario),
@@ -359,6 +373,7 @@ export async function atualizarAnimalLocal(id: string, payload: AnimalAtualizarP
       WHERE id = ?
     `,
     payloadNormalizado.lote ?? null,
+    payloadNormalizado.ordem !== undefined ? payloadNormalizado.ordem : null,
     payloadNormalizado.nome ?? null,
     payloadNormalizado.categoria ?? null,
     payloadNormalizado.vendedor ?? null,
@@ -383,6 +398,7 @@ export async function atualizarAnimalLocal(id: string, payload: AnimalAtualizarP
       SELECT
         id,
         leilao_id,
+        ordem,
         lote,
         nome,
         categoria,
