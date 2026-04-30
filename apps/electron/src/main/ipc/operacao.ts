@@ -290,6 +290,11 @@ function responderJson(
   res.end(JSON.stringify(body))
 }
 
+function isRequisicaoLocal(req: import('http').IncomingMessage) {
+  const address = req.socket.remoteAddress ?? ''
+  return address === '::1' || address === '127.0.0.1' || address.startsWith('::ffff:127.')
+}
+
 async function lerCorpoJson(req: import('http').IncomingMessage) {
   const chunks: Buffer[] = []
 
@@ -375,6 +380,57 @@ function publicarEstadoOperacao(leilaoId: string, estado: OperacaoEstadoPersisti
       cliente.write(payload)
     }
   }
+}
+
+function formatarMoeda(valor: number) {
+  return valor.toLocaleString('pt-BR', {
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2
+  })
+}
+
+async function ajustarLanceOperacaoLocal(leilaoId: string, delta: number) {
+  if (!Number.isFinite(delta) || delta === 0) {
+    throw new Error('Informe um delta de lance válido.')
+  }
+
+  const store = await getStore()
+  const operacaoPorLeilao = store.get('operacaoPorLeilao') ?? {}
+  const estadoAtual = normalizarEstadoPersistido(operacaoPorLeilao[leilaoId] ?? null)
+  const proximoCentavos = Math.max(
+    0,
+    Number(estadoAtual.lanceAtualCentavos || 0) + Math.round(delta * 100)
+  )
+  const valorLance = proximoCentavos / 100
+  const leilao = await obterLeilaoLocal(leilaoId)
+  const multiplicador = Number(leilao?.multiplicador ?? 1) || 1
+  const cotacao = Number(leilao?.cotacao ?? 0)
+  const usaDolar = Boolean(leilao?.usa_dolar)
+
+  const proximoEstado = normalizarEstadoPersistido({
+    ...estadoAtual,
+    lanceDigitado: '',
+    lanceAtual: formatarMoeda(valorLance),
+    lanceAtualCentavos: proximoCentavos,
+    lanceDolar:
+      usaDolar && cotacao > 0 && valorLance > 0
+        ? formatarMoeda(Math.round(valorLance / cotacao))
+        : '0,00',
+    totalReal: formatarMoeda(valorLance * multiplicador),
+    totalDolar:
+      usaDolar && cotacao > 0 && valorLance > 0
+        ? formatarMoeda(Math.round((valorLance * multiplicador) / cotacao))
+        : '0,00'
+  })
+
+  store.set('operacaoPorLeilao', {
+    ...operacaoPorLeilao,
+    [leilaoId]: proximoEstado
+  })
+  store.set('operacaoLeilaoAtualId', leilaoId)
+  publicarEstadoOperacao(leilaoId, proximoEstado)
+
+  return proximoEstado
 }
 
 export async function fetchRemotoJson<T>(url: string, init?: RequestInit): Promise<T> {
@@ -690,6 +746,7 @@ export async function ensureOperacaoServer() {
     const match = url.match(/^\/operacao\/([^/]+)\.json$/)
     const matchEstado = url.match(/^\/operacao\/estado\/([^/]+)$/)
     const matchSync = url.match(/^\/operacao\/sync\/([^/]+)$/)
+    const matchControleLance = url.match(/^\/operacao\/controle\/lance(?:\?.*)?$/)
     const matchEvents = url.match(/^\/operacao\/events\/([^/]+)$/)
     const matchSyncEvents = url.match(/^\/sync\/events\/(.+)$/)
     const matchConexao = url.match(/^\/sync\/conexao$/)
@@ -758,6 +815,29 @@ export async function ensureOperacaoServer() {
           estado,
           arquivo: await buildUrls()
         })
+        return
+      }
+
+      if (matchControleLance && req.method === 'GET') {
+        if (!isRequisicaoLocal(req)) {
+          responderJson(res, 403, { error: 'Controle de lance permitido apenas neste computador.' })
+          return
+        }
+
+        const requestUrl = new URL(url, 'http://127.0.0.1')
+        const delta = Number(requestUrl.searchParams.get('delta') ?? 0)
+        const store = await getStore()
+        const leilaoId = String(
+          requestUrl.searchParams.get('leilaoId') ?? store.get('operacaoLeilaoAtualId') ?? ''
+        ).trim()
+
+        if (!leilaoId) {
+          responderJson(res, 400, { error: 'Nenhum leilão está aberto na operação.' })
+          return
+        }
+
+        const estado = await ajustarLanceOperacaoLocal(leilaoId, delta)
+        responderJson(res, 200, { ok: true, estado })
         return
       }
 
