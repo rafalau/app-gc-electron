@@ -79,7 +79,7 @@ function getIpPadraoVmix(conexao?: ModoConfig | null) {
 
 function aplicarDefaultsFormulario(config: VmixConfig, conexao: ModoConfig): VmixConfig {
   const ipPadraoVmix = getIpPadraoVmix(conexao)
-  const ipVmix = conexao.modo === 'HOST' ? HOST_DEFAULT_IP : String(config.ip ?? '').trim() || ipPadraoVmix
+  const ipVmix = String(config.ip ?? '').trim() || ipPadraoVmix
   const networkCachingMs = Number(config.srt?.networkCachingMs)
 
   return {
@@ -108,7 +108,7 @@ function normalizarConfigFormulario(config: VmixConfig): VmixConfig {
 
   return {
     ativo: Boolean(config.ativo),
-    ip: modoOperacao.value === 'HOST' ? HOST_DEFAULT_IP : String(config.ip ?? '').trim(),
+    ip: String(config.ip ?? '').trim(),
     porta: Number.isInteger(porta) && porta > 0 ? porta : VMIX_DEFAULT_PORT,
     inputSelecionado: config.inputSelecionado
       ? {
@@ -197,16 +197,10 @@ async function carregarListaInputs() {
   }
 }
 
-function restaurarPadroesHostVmix() {
+function resetarIpPadraoHostVmix() {
   form.value = {
     ...form.value,
-    ip: HOST_DEFAULT_IP,
-    porta: VMIX_DEFAULT_PORT,
-    srt: {
-      ...form.value.srt,
-      porta: SRT_DEFAULT_PORT,
-      networkCachingMs: SRT_DEFAULT_NETWORK_CACHING_MS
-    }
+    ip: HOST_DEFAULT_IP
   }
   erro.value = ''
   erroInputs.value = ''
@@ -337,7 +331,6 @@ onMounted(() => {
               class="w-full rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-800 shadow-sm outline-none transition focus:border-blue-400 focus:bg-white focus:ring-4 focus:ring-blue-100 read-only:cursor-not-allowed read-only:bg-slate-100 read-only:text-slate-500"
               type="text"
               placeholder="Ex.: 192.168.0.50"
-              :readonly="modoOperacao === 'HOST'"
               @input="applyUppercaseInput($event, (value) => (form.ip = value))"
             />
           </div>
@@ -477,9 +470,9 @@ onMounted(() => {
           v-if="modoOperacao === 'HOST'"
           variante="secundario"
           :disabled="salvando"
-          @click="restaurarPadroesHostVmix"
+          @click="resetarIpPadraoHostVmix"
         >
-          Restaurar padrões
+          Resetar IP padrão
         </BaseButton>
         <BaseButton :disabled="salvando" @click="fecharJanela">Cancelar</BaseButton>
         <BaseButton variante="primario" :disabled="carregando || salvando" @click="salvar">
